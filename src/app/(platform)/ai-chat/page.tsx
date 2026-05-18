@@ -1,18 +1,21 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/Card";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
-import { chatSessions, suggestedPrompts } from "@/lib/mock-data";
 import type { ChatMessage } from "@/lib/types";
-import { Sparkles, Send, Plus, MessageSquare, Bot, User, Clock } from "lucide-react";
+import { Sparkles, Send, Plus, Bot, User } from "lucide-react";
 import { getTimeAgo } from "@/lib/utils";
 
+const emptySuggestedPrompts = [
+  "How do I start learning?",
+  "What is full-stack development?",
+  "Explain algorithms like I'm 5",
+];
+
 export default function AIChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(chatSessions[0].messages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [activeSession, setActiveSession] = useState(chatSessions[0].id);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -27,7 +30,7 @@ export default function AIChatPage() {
     setTimeout(() => {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(), role: "assistant", timestamp: new Date().toISOString(),
-        content: "That's a great question! Let me explain...\n\nThis is a concept that many developers find tricky at first. The key thing to understand is that it works by creating a reference that persists across renders.\n\nHere's a simple example:\n\n```javascript\nconst result = processData(input);\nconsole.log(result);\n```\n\nWould you like me to elaborate further?",
+        content: "I am a placeholder AI assistant. The real AI backend integration is coming soon!",
       };
       setMessages((prev) => [...prev, aiMsg]);
       setIsTyping(false);
@@ -43,21 +46,8 @@ export default function AIChatPage() {
             <Plus className="w-4 h-4" /> New Chat
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {chatSessions.map((session) => (
-            <button key={session.id}
-              onClick={() => setActiveSession(session.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${activeSession === session.id ? "bg-primary/10 text-primary-light border border-primary/20" : "text-muted-light hover:bg-white/5 border border-transparent"}`}
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 shrink-0" />
-                <span className="truncate">{session.title}</span>
-              </div>
-              <div className="text-xs text-muted mt-0.5 ml-6 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> {getTimeAgo(session.createdAt)}
-              </div>
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-4 text-center">
+            <p className="text-sm text-muted">No chat history</p>
         </div>
       </div>
 
@@ -76,7 +66,7 @@ export default function AIChatPage() {
                 <p className="text-muted-light mt-1">I can help you learn anything. Ask me a question!</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 max-w-md">
-                {suggestedPrompts.map((prompt) => (
+                {emptySuggestedPrompts.map((prompt) => (
                   <button key={prompt} onClick={() => setInput(prompt)}
                     className="px-3 py-2 rounded-xl text-sm bg-white/5 border border-white/10 text-muted-light hover:bg-primary/10 hover:border-primary/20 hover:text-primary-light transition-all cursor-pointer">
                     {prompt}

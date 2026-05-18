@@ -1,39 +1,41 @@
 "use client";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { Progress, XPRing } from "@/components/ui/Progress";
 import { Avatar } from "@/components/ui/Avatar";
-import { currentUser, courses, dailyChallenges, leaderboard, weeklyStats } from "@/lib/mock-data";
-import { formatNumber } from "@/lib/utils";
-import { Flame, Target, BookOpen, Trophy, TrendingUp, ChevronRight, Zap, Star, Clock } from "lucide-react";
+import { Flame, Target, BookOpen, Trophy, TrendingUp, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function DashboardPage() {
-  const recentCourses = courses.filter((c) => c.completedLessons > 0 && c.completedLessons < c.totalLessons);
+  const { profile, user } = useAuth();
+  
+  const firstName = profile?.full_name ? profile.full_name.split(" ")[0] : user?.email?.split('@')[0] || "Student";
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    : user?.email?.substring(0, 2).toUpperCase() || 'U';
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Welcome */}
       <motion.div variants={item}>
         <h1 className="text-2xl md:text-3xl font-bold">
-          Welcome back, <span className="gradient-text">{currentUser.name.split(" ")[0]}</span> 👋
+          Welcome back, <span className="gradient-text">{firstName}</span> 👋
         </h1>
         <p className="text-muted-light mt-1">Continue your learning journey. You&apos;re doing great!</p>
       </motion.div>
 
-      {/* Stats row */}
+      {/* Stats row - Placeholders for real data */}
       <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="flex items-center gap-4">
-          <XPRing xp={currentUser.xp} xpToNext={currentUser.xpToNext} level={currentUser.level} size={72} />
+          <XPRing xp={0} xpToNext={1000} level={1} size={72} />
           <div>
             <div className="text-xs text-muted uppercase tracking-wider">Total XP</div>
-            <div className="text-xl font-bold">{formatNumber(currentUser.xp)}</div>
-            <div className="text-xs text-primary-light">{currentUser.xpToNext - currentUser.xp} to next</div>
+            <div className="text-xl font-bold">0</div>
+            <div className="text-xs text-primary-light">1000 to next</div>
           </div>
         </Card>
 
@@ -43,8 +45,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <div className="text-xs text-muted uppercase tracking-wider">Streak</div>
-            <div className="text-xl font-bold">{currentUser.streak} days</div>
-            <div className="text-xs text-accent-orange">🔥 On fire!</div>
+            <div className="text-xl font-bold">0 days</div>
+            <div className="text-xs text-muted">Start learning!</div>
           </div>
         </Card>
 
@@ -54,8 +56,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <div className="text-xs text-muted uppercase tracking-wider">Courses</div>
-            <div className="text-xl font-bold">{currentUser.completedCourses}/{currentUser.totalCourses}</div>
-            <div className="text-xs text-accent-green">67% complete</div>
+            <div className="text-xl font-bold">0/0</div>
+            <div className="text-xs text-muted">No courses yet</div>
           </div>
         </Card>
 
@@ -65,8 +67,8 @@ export default function DashboardPage() {
           </div>
           <div>
             <div className="text-xs text-muted uppercase tracking-wider">Rank</div>
-            <div className="text-xl font-bold">#{currentUser.rank}</div>
-            <div className="text-xs text-secondary">Top 5%</div>
+            <div className="text-xl font-bold">Unranked</div>
+            <div className="text-xs text-muted">Complete lessons to rank</div>
           </div>
         </Card>
       </motion.div>
@@ -80,51 +82,21 @@ export default function DashboardPage() {
               <h2 className="text-lg font-bold flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> Continue Learning</h2>
               <Link href="/courses" prefetch={true} className="text-sm text-primary-light hover:text-primary flex items-center gap-1">View all <ChevronRight className="w-4 h-4" /></Link>
             </div>
-            <div className="space-y-3">
-              {recentCourses.map((course) => (
-                <Link href={`/courses/${course.id}`} prefetch={true} key={course.id}>
-                  <Card className="flex items-center gap-4 group">
-                    <div className="w-14 h-14 rounded-xl shrink-0 flex items-center justify-center text-2xl" style={{ background: course.gradient }}>
-                      {course.category === "development" ? "💻" : course.category === "design" ? "🎨" : "📊"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm truncate group-hover:text-primary-light transition-colors">{course.title}</h3>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                        <span>{course.completedLessons}/{course.totalLessons} lessons</span>
-                        <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-primary" />{course.xpReward} XP</span>
-                      </div>
-                      <Progress value={course.completedLessons} max={course.totalLessons} size="sm" className="mt-2" />
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-muted group-hover:text-primary-light shrink-0 transition-colors" />
-                  </Card>
-                </Link>
-              ))}
-            </div>
+            <Card hover={false} className="text-center py-12">
+               <BookOpen className="w-12 h-12 text-muted/30 mx-auto mb-4" />
+               <h3 className="font-semibold text-lg text-foreground">No active courses</h3>
+               <p className="text-muted-light mt-1 max-w-sm mx-auto">You haven&apos;t started any courses yet. Browse our catalog to begin your journey.</p>
+               <Link href="/courses" className="mt-4 inline-block px-4 py-2 bg-primary/10 text-primary-light rounded-xl hover:bg-primary/20 transition-colors text-sm font-medium">Explore Courses</Link>
+            </Card>
           </motion.div>
 
           {/* Weekly stats */}
           <motion.div variants={item}>
             <h2 className="text-lg font-bold flex items-center gap-2 mb-4"><TrendingUp className="w-5 h-5 text-primary" /> Weekly Progress</h2>
-            <Card animate={false} hover={false}>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={weeklyStats}>
-                    <defs>
-                      <linearGradient id="xpGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
-                    <YAxis hide />
-                    <Tooltip
-                      contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", color: "#f1f5f9" }}
-                      labelStyle={{ color: "#94a3b8" }}
-                    />
-                    <Area type="monotone" dataKey="xp" stroke="#8b5cf6" strokeWidth={2} fill="url(#xpGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+            <Card animate={false} hover={false} className="flex flex-col items-center justify-center py-12 text-center h-[200px]">
+               <TrendingUp className="w-12 h-12 text-muted/30 mb-4" />
+               <h3 className="font-semibold text-lg text-foreground">No activity data yet</h3>
+               <p className="text-muted-light mt-1">Complete lessons to see your progress chart.</p>
             </Card>
           </motion.div>
         </div>
@@ -134,25 +106,10 @@ export default function DashboardPage() {
           {/* Daily challenges */}
           <motion.div variants={item}>
             <h2 className="text-lg font-bold flex items-center gap-2 mb-4"><Target className="w-5 h-5 text-accent-orange" /> Daily Challenges</h2>
-            <div className="space-y-3">
-              {dailyChallenges.map((ch) => (
-                <Card key={ch.id} className={ch.isCompleted ? "opacity-60" : ""}>
-                  <div className="flex items-center gap-3">
-                    <div className="text-2xl">{ch.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-sm">{ch.title}</h3>
-                        <Badge variant={ch.isCompleted ? "success" : "primary"}>
-                          +{ch.xpReward} XP
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted mt-0.5">{ch.description}</p>
-                      <Progress value={ch.progress} max={ch.maxProgress} size="sm" color={ch.isCompleted ? "green" : "primary"} className="mt-2" />
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+            <Card hover={false} className="text-center py-8">
+               <Target className="w-8 h-8 text-muted/30 mx-auto mb-3" />
+               <p className="text-muted-light text-sm">No challenges available today.</p>
+            </Card>
           </motion.div>
 
           {/* Leaderboard preview */}
@@ -163,19 +120,26 @@ export default function DashboardPage() {
             </div>
             <Card animate={false} hover={false}>
               <div className="space-y-3">
-                {leaderboard.slice(0, 5).map((entry) => (
-                  <div key={entry.rank} className={`flex items-center gap-3 p-2 rounded-xl ${entry.user.id === currentUser.id ? "bg-primary/10 border border-primary/20" : ""}`}>
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${entry.rank <= 3 ? "bg-gradient-to-br from-accent-orange to-amber-400 text-white" : "bg-white/10 text-muted-light"}`}>
-                      {entry.rank}
+                 <div className="flex items-center gap-3 p-2 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 bg-white/10 text-muted-light">
+                      -
                     </div>
-                    <Avatar name={entry.user.name} size="sm" />
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden">
+                        {initials}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{entry.user.name}</div>
-                      <div className="text-xs text-muted">Lvl {entry.level}</div>
+                      <div className="text-sm font-medium truncate">{profile?.full_name || user?.email?.split('@')[0]}</div>
+                      <div className="text-xs text-muted">Lvl 1</div>
                     </div>
-                    <div className="text-sm font-semibold text-primary-light">{formatNumber(entry.xp)}</div>
+                    <div className="text-sm font-semibold text-primary-light">0</div>
                   </div>
-                ))}
+                  <div className="text-center pt-4 pb-2">
+                    <p className="text-xs text-muted">No other leaderboard data yet.</p>
+                  </div>
               </div>
             </Card>
           </motion.div>

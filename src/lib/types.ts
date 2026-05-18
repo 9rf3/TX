@@ -1,3 +1,5 @@
+export type UserRole = 'student' | 'teacher' | 'admin';
+
 export interface User {
   id: string;
   name: string;
@@ -14,7 +16,7 @@ export interface User {
   totalCourses: number;
   joinedAt: string;
   isOnline: boolean;
-  role: 'student' | 'teacher' | 'admin';
+  role: UserRole;
 }
 
 export interface Course {

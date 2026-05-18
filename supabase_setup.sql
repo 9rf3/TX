@@ -1,5 +1,8 @@
 -- Run this script in your Supabase SQL Editor
 
+-- Create role enum type
+create type public.user_role as enum ('student', 'teacher', 'admin');
+
 -- Create the profiles table
 create table public.profiles (
   id uuid references auth.users not null primary key,
@@ -7,6 +10,7 @@ create table public.profiles (
   full_name text,
   username text,
   avatar_url text,
+  role public.user_role default 'student'::public.user_role not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -27,12 +31,13 @@ create policy "Users can update own profile." on profiles
 create function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email, full_name, avatar_url)
+  insert into public.profiles (id, email, full_name, avatar_url, role)
   values (
     new.id, 
     new.email, 
     new.raw_user_meta_data->>'full_name', 
-    new.raw_user_meta_data->>'avatar_url'
+    new.raw_user_meta_data->>'avatar_url',
+    'student'::public.user_role
   );
   return new;
 end;

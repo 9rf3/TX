@@ -5,12 +5,15 @@ import { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 
+import { UserRole } from "@/lib/types";
+
 export interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  role: UserRole;
 }
 
 interface AuthContextType {
