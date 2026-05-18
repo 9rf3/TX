@@ -7,7 +7,8 @@ First, run the development server:
 ```bash
 git add .
 git commit -m "aa"
-git push
+git pull origin main
+git push origin main
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
