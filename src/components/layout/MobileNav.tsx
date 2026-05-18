@@ -22,7 +22,7 @@ export function MobileNav() {
         {items.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
-            <Link key={item.href} href={item.href}
+            <Link key={item.href} href={item.href} prefetch={true}
               className={cn("flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all relative",
                 isActive ? "text-primary-light" : "text-muted"
               )}

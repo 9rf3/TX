@@ -78,11 +78,11 @@ export default function DashboardPage() {
           <motion.div variants={item}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> Continue Learning</h2>
-              <Link href="/courses" className="text-sm text-primary-light hover:text-primary flex items-center gap-1">View all <ChevronRight className="w-4 h-4" /></Link>
+              <Link href="/courses" prefetch={true} className="text-sm text-primary-light hover:text-primary flex items-center gap-1">View all <ChevronRight className="w-4 h-4" /></Link>
             </div>
             <div className="space-y-3">
               {recentCourses.map((course) => (
-                <Link href={`/courses/${course.id}`} key={course.id}>
+                <Link href={`/courses/${course.id}`} prefetch={true} key={course.id}>
                   <Card className="flex items-center gap-4 group">
                     <div className="w-14 h-14 rounded-xl shrink-0 flex items-center justify-center text-2xl" style={{ background: course.gradient }}>
                       {course.category === "development" ? "💻" : course.category === "design" ? "🎨" : "📊"}
@@ -159,7 +159,7 @@ export default function DashboardPage() {
           <motion.div variants={item}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2"><Trophy className="w-5 h-5 text-accent-orange" /> Leaderboard</h2>
-              <Link href="/leaderboard" className="text-sm text-primary-light hover:text-primary flex items-center gap-1">See all <ChevronRight className="w-4 h-4" /></Link>
+              <Link href="/leaderboard" prefetch={true} className="text-sm text-primary-light hover:text-primary flex items-center gap-1">See all <ChevronRight className="w-4 h-4" /></Link>
             </div>
             <Card animate={false} hover={false}>
               <div className="space-y-3">

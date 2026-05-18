@@ -54,7 +54,7 @@ export default function CoursesPage() {
         className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5" key={category}>
         {filtered.map((course) => (
           <motion.div variants={item} key={course.id}>
-            <Link href={`/courses/${course.id}`}>
+            <Link href={`/courses/${course.id}`} prefetch={true}>
               <Card className="group overflow-hidden !p-0">
                 {/* Header */}
                 <div className="relative h-36 flex items-center justify-center" style={{ background: course.gradient }}>

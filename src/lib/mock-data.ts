@@ -17,13 +17,23 @@ const instructors = [
   { id: '3', name: 'Dr. Emily Park', avatar: '/avatars/emily.jpg', title: 'AI Researcher @ DeepMind', bio: 'PhD in Machine Learning, passionate about teaching.', rating: 4.9, students: 28400, courses: 6 },
 ];
 
+// Deterministic seeded PRNG to avoid hydration mismatches
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
 const makeLessons = (count: number, prefix: string): Lesson[] =>
-  Array.from({ length: count }, (_, i) => ({
-    id: `${prefix}-${i + 1}`, title: `Lesson ${i + 1}: ${['Introduction', 'Core Concepts', 'Advanced Patterns', 'State Management', 'API Integration', 'Testing', 'Deployment', 'Best Practices', 'Real Projects', 'Final Review'][i % 10]}`,
-    description: 'Deep dive into this topic with hands-on examples.', duration: `${15 + Math.floor(Math.random() * 30)}min`,
-    videoUrl: '', order: i + 1, isCompleted: i < Math.floor(count * 0.4), isLocked: i > Math.floor(count * 0.5),
-    xpReward: 50 + Math.floor(Math.random() * 50), type: i % 4 === 3 ? 'quiz' : i % 5 === 4 ? 'project' : 'video',
-  }));
+  Array.from({ length: count }, (_, i) => {
+    const seed1 = i * 137 + prefix.length * 31;
+    const seed2 = i * 251 + prefix.length * 53;
+    return {
+      id: `${prefix}-${i + 1}`, title: `Lesson ${i + 1}: ${['Introduction', 'Core Concepts', 'Advanced Patterns', 'State Management', 'API Integration', 'Testing', 'Deployment', 'Best Practices', 'Real Projects', 'Final Review'][i % 10]}`,
+      description: 'Deep dive into this topic with hands-on examples.', duration: `${15 + Math.floor(seededRandom(seed1) * 30)}min`,
+      videoUrl: '', order: i + 1, isCompleted: i < Math.floor(count * 0.4), isLocked: i > Math.floor(count * 0.5),
+      xpReward: 50 + Math.floor(seededRandom(seed2) * 50), type: i % 4 === 3 ? 'quiz' : i % 5 === 4 ? 'project' : 'video',
+    };
+  });
 
 export const courses: Course[] = [
   { id: '1', title: 'React — Complete Masterclass', description: 'Learn React from zero to hero. Hooks, Context, Redux, Next.js and more.', category: 'development', thumbnail: '', gradient: 'linear-gradient(135deg, #6c5ce7, #a29bfe)', instructor: instructors[0], lessons: makeLessons(42, 'react'), totalLessons: 42, completedLessons: 16, duration: '28h', xpReward: 2500, rating: 4.9, students: 15420, price: 'free', level: 'intermediate', tags: ['React', 'JavaScript', 'Frontend'], achievements: [] },
