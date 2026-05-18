@@ -1,15 +1,32 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Mail, Lock, User, Zap, ArrowRight } from "lucide-react";
+import { signup } from "@/actions/auth";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("password", password);
+    
+    startTransition(async () => {
+      const result = await signup(formData);
+      if (result?.error) setError(result.error);
+    });
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
@@ -28,21 +45,20 @@ export default function RegisterPage() {
             <p className="text-sm text-muted-light">Start your learning adventure today</p>
           </div>
 
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-            <Input label="Full Name" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} icon={<User className="w-4 h-4" />} />
-            <Input label="Email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} icon={<Mail className="w-4 h-4" />} />
-            <Input label="Password" type="password" placeholder="Min 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} icon={<Lock className="w-4 h-4" />} />
+          <form className="space-y-4" onSubmit={handleRegister}>
+            {error && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm text-center">{error}</div>}
+            <Input label="Full Name" name="name" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} icon={<User className="w-4 h-4" />} />
+            <Input label="Email" name="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} icon={<Mail className="w-4 h-4" />} />
+            <Input label="Password" name="password" type="password" placeholder="Min 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} icon={<Lock className="w-4 h-4" />} />
 
             <label className="flex items-start gap-2 text-sm text-muted-light cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 mt-0.5 rounded bg-white/5 border-white/20 accent-primary" />
+              <input type="checkbox" required className="w-4 h-4 mt-0.5 rounded bg-white/5 border-white/20 accent-primary" />
               I agree to the <span className="text-primary-light">Terms of Service</span> and <span className="text-primary-light">Privacy Policy</span>
             </label>
 
-            <Link href="/dashboard">
-              <Button className="w-full" size="lg">
-                Create Account <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <Button className="w-full" size="lg" type="submit" disabled={isPending}>
+              {isPending ? "Creating Account..." : "Create Account"} <ArrowRight className="w-4 h-4" />
+            </Button>
           </form>
 
           <p className="text-center text-sm text-muted-light">

@@ -14,11 +14,32 @@ export const metadata: Metadata = {
   keywords: ["education", "online learning", "AI", "gamification", "courses"],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+import { cookies } from "next/headers";
+import { createClient } from "@/utils/supabase/server";
+import { AuthProvider } from "@/components/providers/AuthProvider";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  let profile = null;
+  
+  if (user) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+    profile = data;
+  }
+
   return (
     <html lang="en" className={`${inter.variable} dark`}>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased">
-        {children}
+        <AuthProvider initialUser={user} initialProfile={profile}>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

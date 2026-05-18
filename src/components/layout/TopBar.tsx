@@ -1,12 +1,22 @@
 "use client";
-import { Bell, Search, Menu, Zap } from "lucide-react";
+import { Bell, Search, Menu, Zap, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { logout } from "@/actions/auth";
+import { useState } from "react";
 
 interface TopBarProps {
   onMenuClick: () => void;
 }
 
 export function TopBar({ onMenuClick }: TopBarProps) {
+  const { user, profile } = useAuth();
+  const [showDropdown, setShowDropdown] = useState(false);
+  
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    : user?.email?.substring(0, 2).toUpperCase() || 'U';
+
   return (
     <header className="sticky top-0 z-30 h-16 flex items-center justify-between gap-4 px-4 md:px-6 bg-background/80 backdrop-blur-xl border-b border-border">
       <div className="flex items-center gap-3">
@@ -43,8 +53,38 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         </button>
 
         {/* Avatar */}
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] transition-shadow">
-          AM
+        <div className="relative">
+          <div 
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-sm font-bold text-white cursor-pointer hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] transition-shadow overflow-hidden"
+          >
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
+          </div>
+          
+          {showDropdown && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
+              <div className="absolute right-0 mt-2 w-48 rounded-xl bg-surface border border-border shadow-xl z-50 overflow-hidden">
+                <div className="p-3 border-b border-border">
+                  <div className="text-sm font-semibold truncate">{profile?.full_name || user?.email?.split('@')[0]}</div>
+                  <div className="text-xs text-muted truncate">{user?.email}</div>
+                </div>
+                <div className="p-1">
+                  <button 
+                    onClick={() => logout()} 
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-accent-red hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Log Out
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>

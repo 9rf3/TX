@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Menu, X } from "lucide-react";
+import { Zap, Menu, X, User } from "lucide-react";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 const navLinks = [
   { href: "#features", label: "Features" },
@@ -15,6 +16,7 @@ const navLinks = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
@@ -56,14 +58,30 @@ export function Navbar() {
 
             {/* Actions */}
             <div className="flex items-center gap-3">
-              <Link href="/login"
-                className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-[#94a3b8] hover:text-white transition-colors">
-                Log In
-              </Link>
-              <Link href="/register"
-                className="hidden sm:inline-flex px-5 py-2.5 text-sm font-semibold text-white bg-[#8b5cf6] rounded-xl hover:bg-[#7c3aed] hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] transition-all duration-300">
-                Get Started Free
-              </Link>
+              {user ? (
+                <>
+                  <Link href="/dashboard"
+                    className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-[#94a3b8] hover:text-white transition-colors">
+                    Dashboard
+                  </Link>
+                  <Link href="/profile"
+                    className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-white/10 rounded-xl hover:bg-white/20 transition-all duration-300">
+                    <User className="w-4 h-4" />
+                    {profile?.full_name?.split(' ')[0] || "Account"}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/login"
+                    className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-[#94a3b8] hover:text-white transition-colors">
+                    Log In
+                  </Link>
+                  <Link href="/register"
+                    className="hidden sm:inline-flex px-5 py-2.5 text-sm font-semibold text-white bg-[#8b5cf6] rounded-xl hover:bg-[#7c3aed] hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] transition-all duration-300">
+                    Get Started Free
+                  </Link>
+                </>
+              )}
               <button onClick={() => setMobileOpen(true)}
                 className="md:hidden p-2 text-[#94a3b8] hover:text-white rounded-xl hover:bg-white/5 cursor-pointer">
                 <Menu className="w-5 h-5" />
@@ -93,8 +111,17 @@ export function Navbar() {
                   </a>
                 ))}
                 <div className="pt-4 space-y-3">
-                  <Link href="/login" className="block px-4 py-3 text-sm text-center text-white/70 border border-white/10 rounded-xl">Log In</Link>
-                  <Link href="/register" className="block px-4 py-3 text-sm text-center text-white font-semibold bg-[#8b5cf6] rounded-xl">Get Started Free</Link>
+                  {user ? (
+                    <>
+                      <Link href="/dashboard" className="block px-4 py-3 text-sm text-center text-white/70 border border-white/10 rounded-xl">Dashboard</Link>
+                      <Link href="/profile" className="block px-4 py-3 text-sm text-center text-white font-semibold bg-white/10 rounded-xl">Account</Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/login" className="block px-4 py-3 text-sm text-center text-white/70 border border-white/10 rounded-xl">Log In</Link>
+                      <Link href="/register" className="block px-4 py-3 text-sm text-center text-white font-semibold bg-[#8b5cf6] rounded-xl">Get Started Free</Link>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>

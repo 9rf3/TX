@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, BookOpen, Trophy, User, MessageSquare, Users, Shield,
-  GraduationCap, Zap, ChevronLeft, ChevronRight, Sparkles, X,
+  GraduationCap, Zap, ChevronLeft, ChevronRight, Sparkles, X, LogOut,
 } from "lucide-react";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { logout } from "@/actions/auth";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -27,6 +29,11 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const { user, profile } = useAuth();
+  
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    : user?.email?.substring(0, 2).toUpperCase() || 'U';
 
   const sidebarContent = (
     <div className={cn(
@@ -88,18 +95,25 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
       </div>
 
       {/* User card */}
-      {!collapsed && (
+      {!collapsed && user && (
         <div className="px-3 pb-4">
-          <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5 border border-white/10">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-sm font-bold text-white">
-              AM
+          <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/5 border border-white/10 group">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-sm font-bold text-white shrink-0 overflow-hidden">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold truncate">Alex Morgan</div>
-              <div className="text-xs text-muted flex items-center gap-1">
-                <Zap className="w-3 h-3 text-primary" /> Level 24
+              <div className="text-sm font-semibold truncate">{profile?.full_name || user.email?.split('@')[0]}</div>
+              <div className="text-xs text-muted flex items-center gap-1 truncate">
+                {profile?.username ? `@${profile.username}` : user.email}
               </div>
             </div>
+            <button onClick={() => logout()} className="p-1.5 text-muted-light hover:text-accent-red hover:bg-accent-red/10 rounded-lg transition-colors cursor-pointer" title="Log out">
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
