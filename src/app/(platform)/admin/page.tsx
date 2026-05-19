@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Tabs } from "@/components/ui/Tabs";
 import { Avatar } from "@/components/ui/Avatar";
-import { Users, BookOpen, DollarSign, Activity, Shield, Search, Plus, MoreHorizontal, Eye, Edit, Ban } from "lucide-react";
+import { Users, BookOpen, DollarSign, Activity, Shield, Search, Tags, Plus, Eye, Edit, Ban, ArrowRight } from "lucide-react";
 import { useRequireRole, ROLES } from "@/lib/role-utils";
 import { useUsers } from "@/lib/hooks/useUsers";
 import { useCourses } from "@/lib/hooks/useCourses";
@@ -18,12 +19,9 @@ const item = { hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0 } };
 export default function AdminPage() {
   const { isAuthorized, isLoading: isRoleLoading } = useRequireRole([ROLES.ADMIN]);
   const [tab, setTab] = useState("overview");
-  
+
   const { users, fetchUsers, isLoading: isUsersLoading } = useUsers();
-  const { courses, fetchCourses, createCourse, isLoading: isCoursesLoading } = useCourses();
-  
-  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
-  const [newCourse, setNewCourse] = useState({ title: "", description: "", category: "development", price: "free", level: "beginner", published: true });
+  const { courses, fetchCourses, isLoading: isCoursesLoading } = useCourses();
 
   useEffect(() => {
     if (isAuthorized) {
@@ -35,27 +33,6 @@ export default function AdminPage() {
       }
     }
   }, [isAuthorized, tab, fetchUsers, fetchCourses]);
-
-  const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createCourse({
-        title: newCourse.title,
-        description: newCourse.description,
-        category: newCourse.category,
-        price: newCourse.price,
-        level: newCourse.level,
-        published: newCourse.published,
-        gradient: "linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)",
-        thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=2070&auto=format&fit=crop"
-      });
-      setIsCreatingCourse(false);
-      setNewCourse({ title: "", description: "", category: "development", price: "free", level: "beginner", published: true });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create course");
-    }
-  };
 
   if (isRoleLoading || !isAuthorized) {
     return <div className="p-8 text-center text-muted">Loading...</div>;
@@ -72,13 +49,12 @@ export default function AdminPage() {
       </motion.div>
 
       <Tabs
-        tabs={[{ id: "overview", label: "Overview" }, { id: "users", label: "Users" }, { id: "courses", label: "Courses" }, { id: "moderation", label: "Moderation" }]}
+        tabs={[{ id: "overview", label: "Overview" }, { id: "users", label: "Users" }, { id: "courses", label: "Courses" }, { id: "categories", label: "Categories" }, { id: "moderation", label: "Moderation" }]}
         activeTab={tab} onChange={setTab}
       />
 
       {tab === "overview" && (
         <>
-          {/* Stats cards */}
           <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { icon: <Users className="w-6 h-6 text-primary" />, label: "Total Users", value: isUsersLoading ? "..." : formatNumber(users.length), color: "from-primary/10 to-primary/5" },
@@ -96,12 +72,35 @@ export default function AdminPage() {
             ))}
           </motion.div>
 
-          <motion.div variants={item} className="pt-8">
-            <Card hover={false} className="text-center py-20 flex flex-col justify-center items-center">
-               <Activity className="w-16 h-16 text-muted/30 mx-auto mb-4" />
-               <h3 className="font-semibold text-xl text-foreground">No Dashboard Data</h3>
-               <p className="text-muted-light mt-2 max-w-md mx-auto">Analytics and chart data will populate here once users begin interacting with the platform.</p>
-            </Card>
+          <motion.div variants={item} className="grid sm:grid-cols-2 gap-4">
+            <Link href="/admin/courses">
+              <Card className="flex items-center justify-between hover:border-primary/40 transition-colors cursor-pointer">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-secondary" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Manage Courses</div>
+                    <div className="text-xs text-muted">{courses.length} courses</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted" />
+              </Card>
+            </Link>
+            <Link href="/admin/categories">
+              <Card className="flex items-center justify-between hover:border-primary/40 transition-colors cursor-pointer">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Tags className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">Manage Categories</div>
+                    <div className="text-xs text-muted">Organize courses</div>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted" />
+              </Card>
+            </Link>
           </motion.div>
         </>
       )}
@@ -115,7 +114,7 @@ export default function AdminPage() {
             </div>
             <Button variant="ghost" size="sm" onClick={() => fetchUsers()}>Refresh</Button>
           </div>
-          
+
           {isUsersLoading ? (
             <div className="p-12 text-center text-muted">Loading users...</div>
           ) : users.length === 0 ? (
@@ -171,76 +170,44 @@ export default function AdminPage() {
 
       {tab === "courses" && (
         <motion.div variants={item}>
-          <div className="flex flex-col sm:flex-row gap-4 justify-between mb-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-              <input placeholder="Search courses..." className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted focus:outline-none focus:border-primary/50 transition-all" />
-            </div>
-            <Button size="sm" onClick={() => setIsCreatingCourse(!isCreatingCourse)}>
-              {isCreatingCourse ? "Cancel" : <><Plus className="w-4 h-4 mr-1" /> Add Course</>}
-            </Button>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted">Manage all courses on the platform</p>
+            <Link href="/admin/courses">
+              <Button size="sm"><ArrowRight className="w-4 h-4 mr-1" /> Course Manager</Button>
+            </Link>
           </div>
-
-          {isCreatingCourse && (
-            <Card className="mb-6 border-primary/30">
-              <h3 className="text-lg font-bold mb-4">Create New Course</h3>
-              <form onSubmit={handleCreateCourse} className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-light">Course Title</label>
-                    <input required value={newCourse.title} onChange={e => setNewCourse({...newCourse, title: e.target.value})} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-primary/50" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courses.slice(0, 6).map((course) => (
+              <Link key={course.id} href={`/admin/courses/${course.id}/edit`}>
+                <Card className="hover:border-primary/40 transition-colors cursor-pointer h-full">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ background: course.gradient || "#1e293b" }}>
+                      <BookOpen className="w-5 h-5 text-white/70" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{course.title}</div>
+                      <div className="text-xs text-muted truncate">{course.instructor?.full_name || "Unknown"}</div>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-light">Category</label>
-                    <select value={newCourse.category} onChange={e => setNewCourse({...newCourse, category: e.target.value})} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-primary/50">
-                      <option value="development">Development</option>
-                      <option value="design">Design</option>
-                      <option value="business">Business</option>
-                      <option value="data">Data Science</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs text-muted-light">Description</label>
-                    <textarea required value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm focus:outline-none focus:border-primary/50" rows={3} />
-                  </div>
-                </div>
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={isCoursesLoading}>
-                    {isCoursesLoading ? "Creating..." : "Create Course"}
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          )}
-
-          {isCoursesLoading ? (
-            <div className="p-12 text-center text-muted">Loading courses...</div>
-          ) : courses.length === 0 ? (
-            <Card hover={false} className="text-center py-20 flex flex-col justify-center items-center">
-               <BookOpen className="w-16 h-16 text-muted/30 mx-auto mb-4" />
-               <h3 className="font-semibold text-xl text-foreground">No Courses Found</h3>
-               <p className="text-muted-light mt-2 max-w-md mx-auto">Click "Add Course" to create your first course.</p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {courses.map((course) => (
-                <Card key={course.id} className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: course.gradient || "#333" }}>
-                    {course.category === "development" ? "💻" : course.category === "design" ? "🎨" : "📚"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{course.title}</div>
-                    <div className="text-xs text-muted truncate">{course.instructor?.full_name || "Unknown Instructor"} • {new Date(course.created_at).toLocaleDateString()}</div>
-                  </div>
-                  <div className="flex items-center gap-3 justify-between sm:justify-end">
-                    <Badge variant={course.published ? "success" : "default"}>{course.published ? "Published" : "Draft"}</Badge>
-                    <Badge variant={course.price === "free" ? "success" : "primary"}>{course.price === "free" ? "Free" : `$${course.price}`}</Badge>
-                    <button className="p-2 rounded-lg hover:bg-white/5 text-muted cursor-pointer"><MoreHorizontal className="w-4 h-4" /></button>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={course.published ? "success" : "default"} size="sm">{course.published ? "Published" : "Draft"}</Badge>
+                    <Badge variant={course.price === "free" ? "success" : "primary"} size="sm">{course.price === "free" ? "Free" : `$${course.price}`}</Badge>
                   </div>
                 </Card>
-              ))}
-            </div>
-          )}
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {tab === "categories" && (
+        <motion.div variants={item}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-muted">Organize courses with categories</p>
+            <Link href="/admin/categories">
+              <Button size="sm"><Tags className="w-4 h-4 mr-1" /> Manage Categories</Button>
+            </Link>
+          </div>
         </motion.div>
       )}
 

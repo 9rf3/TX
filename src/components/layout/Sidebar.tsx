@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, BookOpen, Trophy, User, MessageSquare, Users, Shield,
-  GraduationCap, Zap, ChevronLeft, ChevronRight, Sparkles, X, LogOut,
+  GraduationCap, Zap, ChevronLeft, ChevronRight, Sparkles, X, LogOut, Tags,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { logout } from "@/actions/auth";
@@ -17,7 +17,12 @@ const navItems = [
   { href: "/ai-chat", label: "AI Assistant", icon: Sparkles },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/profile", label: "Profile", icon: User },
+];
+
+const adminNavItems = [
   { href: "/admin", label: "Admin", icon: Shield },
+  { href: "/admin/courses", label: "Admin Courses", icon: BookOpen },
+  { href: "/admin/categories", label: "Categories", icon: Tags },
 ];
 
 interface SidebarProps {
@@ -83,6 +88,42 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
             </Link>
           );
         })}
+
+        {/* Admin section - only shown for admins */}
+        {profile?.role === "admin" && (
+          <>
+            {!collapsed && (
+              <div className="pt-4 pb-1 px-3">
+                <div className="text-[10px] uppercase tracking-widest text-muted font-semibold">Admin</div>
+              </div>
+            )}
+            {adminNavItems.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              return (
+                <Link key={item.href} href={item.href} prefetch={true} onClick={onMobileClose}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative",
+                    isActive
+                      ? "text-white bg-primary/15 border border-primary/25"
+                      : "text-muted-light hover:text-foreground hover:bg-white/5"
+                  )}
+                >
+                  {isActive && (
+                    <motion.div layoutId="sidebar-active-admin"
+                      className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/20"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <item.icon className={cn("w-5 h-5 shrink-0 relative z-10", isActive && "text-primary-light")} />
+                  {!collapsed && <span className="relative z-10 truncate">{item.label}</span>}
+                  {isActive && !collapsed && (
+                    <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow z-10" />
+                  )}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       {/* Collapse toggle (desktop only) */}

@@ -45,7 +45,7 @@ export function useFriends() {
       // We need to fetch the profile of the "other" user for each friendship
       const otherUserIds = fData.map(f => f.user_id_1 === userId ? f.user_id_2 : f.user_id_1);
       
-      let profiles: Record<string, UserProfile> = {};
+      const profiles: Record<string, UserProfile> = {};
       if (otherUserIds.length > 0) {
         const { data: pData, error: pErr } = await supabase
           .from("profiles")

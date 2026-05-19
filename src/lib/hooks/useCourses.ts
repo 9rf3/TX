@@ -1,25 +1,12 @@
 import { useCallback, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { UserProfile } from "./useUsers";
+import type { DbCourseWithInstructor } from "@/lib/types";
 
-export interface CourseData {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  thumbnail: string | null;
-  gradient: string | null;
-  price: string;
-  level: string;
-  published: boolean;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  instructor?: UserProfile;
-}
+export type CourseData = DbCourseWithInstructor;
 
 export function useCourses() {
   const [courses, setCourses] = useState<CourseData[]>([]);
+  const [course, setCourse] = useState<CourseData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
@@ -41,15 +28,39 @@ export function useCourses() {
 
       if (err) throw err;
       setCourses(data as unknown as CourseData[]);
-    } catch (err: any) {
-      console.error("Error fetching courses:", err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch courses";
+      console.error("Error fetching courses:", message);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [supabase]);
 
-  const createCourse = async (courseData: Partial<CourseData>) => {
+  const fetchCourse = useCallback(async (id: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from("courses")
+        .select("*, instructor:profiles(*)")
+        .eq("id", id)
+        .single();
+
+      if (err) throw err;
+      setCourse(data as unknown as CourseData);
+      return data as unknown as CourseData;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch course";
+      console.error("Error fetching course:", message);
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase]);
+
+  const createCourse = async (courseData: Record<string, unknown>) => {
     setError(null);
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -62,14 +73,62 @@ export function useCourses() {
         .single();
 
       if (err) throw err;
-      setCourses(prev => [data as unknown as CourseData, ...prev]);
-      return data;
-    } catch (err: any) {
-      console.error("Error creating course:", err.message);
-      setError(err.message);
+      const created = data as unknown as CourseData;
+      setCourses(prev => [created, ...prev]);
+      return created;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create course";
+      console.error("Error creating course:", message);
+      setError(message);
       throw err;
     }
   };
 
-  return { courses, fetchCourses, createCourse, isLoading, error };
+  const updateCourse = async (id: string, courseData: Record<string, unknown>) => {
+    setError(null);
+    try {
+      const { data, error: err } = await supabase
+        .from("courses")
+        .update({ ...courseData, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*, instructor:profiles(*)")
+        .single();
+
+      if (err) throw err;
+      const updated = data as unknown as CourseData;
+      setCourses(prev => prev.map(c => c.id === id ? updated : c));
+      setCourse(updated);
+      return updated;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update course";
+      console.error("Error updating course:", message);
+      setError(message);
+      throw err;
+    }
+  };
+
+  const deleteCourse = async (id: string) => {
+    setError(null);
+    try {
+      const { error: err } = await supabase
+        .from("courses")
+        .delete()
+        .eq("id", id);
+
+      if (err) throw err;
+      setCourses(prev => prev.filter(c => c.id !== id));
+      if (course?.id === id) setCourse(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete course";
+      console.error("Error deleting course:", message);
+      setError(message);
+      throw err;
+    }
+  };
+
+  return {
+    courses, course, fetchCourses, fetchCourse,
+    createCourse, updateCourse, deleteCourse,
+    isLoading, error
+  };
 }

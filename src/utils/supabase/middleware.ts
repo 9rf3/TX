@@ -39,7 +39,8 @@ export async function updateSession(request: NextRequest) {
                       
   const protectedRoutes = [
     '/dashboard', '/admin', '/ai-chat', '/courses', 
-    '/friends', '/leaderboard', '/lessons', '/profile', '/quiz'
+    '/friends', '/leaderboard', '/lessons', '/profile', '/quiz',
+    '/admin/courses', '/admin/categories'
   ];
   
   const isProtectedRoute = protectedRoutes.some(route => 

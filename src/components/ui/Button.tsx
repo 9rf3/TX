@@ -10,10 +10,11 @@ interface ButtonProps {
   className?: string;
   disabled?: boolean;
   type?: "button" | "submit" | "reset";
+  style?: React.CSSProperties;
   onClick?: () => void;
 }
 
-export function Button({ variant = "primary", size = "md", glow = false, className, children, disabled, type = "button", onClick }: ButtonProps) {
+export function Button({ variant = "primary", size = "md", glow = false, className, children, disabled, type = "button", style, onClick }: ButtonProps) {
   const base = "inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
   const variants: Record<string, string> = {
     primary: "bg-primary text-white hover:bg-primary-dark hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] active:scale-95",
@@ -28,7 +29,7 @@ export function Button({ variant = "primary", size = "md", glow = false, classNa
 
   return (
     <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-      type={type} disabled={disabled} onClick={onClick}
+      type={type} disabled={disabled} onClick={onClick} style={style}
       className={cn(base, variants[variant], sizes[size], glow && "animate-pulse-glow", className)}>
       {children}
     </motion.button>

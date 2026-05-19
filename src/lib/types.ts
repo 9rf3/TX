@@ -176,3 +176,53 @@ export interface MonthlyStats {
   revenue: number;
   courses: number;
 }
+
+// ─── Database model types ────────────────────────────────────────────────────
+
+export type DbVideoType = 'upload' | 'external' | 'none';
+
+export interface DbCourse {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  thumbnail: string | null;
+  gradient: string | null;
+  price: string;
+  level: string;
+  published: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbCourseWithInstructor extends DbCourse {
+  instructor: {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    username: string | null;
+    avatar_url: string | null;
+    role: UserRole;
+  } | null;
+}
+
+export interface DbCategory {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface DbCourseModule {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+  video_url: string | null;
+  video_type: DbVideoType;
+  duration: number;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
