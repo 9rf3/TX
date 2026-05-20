@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 type BucketName = 'course-videos' | 'course-thumbnails';
@@ -7,7 +7,7 @@ export function useStorage() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
 
   const uploadFile = async (bucket: BucketName, file: File, path: string) => {
     setIsUploading(true);
@@ -15,7 +15,7 @@ export function useStorage() {
     setProgress(0);
 
     try {
-      const { error: err } = await supabase.storage
+      const { error: err } = await supabaseRef.current.storage
         .from(bucket)
         .upload(path, file, {
           cacheControl: '3600',
@@ -24,7 +24,7 @@ export function useStorage() {
 
       if (err) throw err;
 
-      const { data: publicUrlData } = supabase.storage
+      const { data: publicUrlData } = supabaseRef.current.storage
         .from(bucket)
         .getPublicUrl(path);
 
@@ -42,7 +42,7 @@ export function useStorage() {
 
   const removeFile = async (bucket: BucketName, path: string) => {
     try {
-      const { error: err } = await supabase.storage
+      const { error: err } = await supabaseRef.current.storage
         .from(bucket)
         .remove([path]);
       if (err) throw err;
@@ -54,7 +54,7 @@ export function useStorage() {
   };
 
   const getPublicUrl = (bucket: BucketName, path: string) => {
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    const { data } = supabaseRef.current.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
 

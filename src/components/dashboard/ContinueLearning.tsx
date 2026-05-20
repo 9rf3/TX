@@ -4,49 +4,66 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Progress } from "@/components/ui/Progress";
 import { Button } from "@/components/ui/Button";
-import { BookOpen, PlayCircle, ChevronRight, Clock } from "lucide-react";
+import { BookOpen, PlayCircle, ChevronRight, Clock, Shield, Sparkles, Zap } from "lucide-react";
 import { useCourses } from "@/lib/hooks/useCourses";
+import { useSound } from "@/lib/hooks/useSound";
 
 export function ContinueLearning() {
   const { courses, isLoading } = useCourses();
+  const { playClick } = useSound();
   const published = courses.filter(c => c.published);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-primary" /> Continue Learning
-        </h2>
-        <Link href="/courses" className="text-sm text-primary-light hover:text-primary flex items-center gap-1 transition-colors">
-          View all <ChevronRight className="w-4 h-4" />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center">
+            <BookOpen className="w-5 h-5 text-primary-light" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-white uppercase tracking-wider">Active Campaigns</h2>
+            <p className="text-xs text-muted-light">Resume your current learning campaigns and unlock rank bonuses</p>
+          </div>
+        </div>
+
+        <Link
+          href="/courses"
+          className="text-xs text-primary-light hover:text-white transition-colors flex items-center gap-0.5 bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-xl"
+        >
+          Explore All <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
       {isLoading ? (
-        <Card className="p-8 text-center text-muted text-sm">Loading courses...</Card>
+        <Card className="p-8 text-center text-muted text-sm bg-surface">Loading campaign databases...</Card>
       ) : published.length === 0 ? (
-        <Card className="relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5" />
-          <div className="relative z-10 p-8 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-              <BookOpen className="w-7 h-7 text-primary-light" />
-            </div>
-            <h3 className="font-semibold text-lg text-foreground mb-1">No active courses</h3>
-            <p className="text-muted-light text-sm max-w-sm mx-auto mb-5">
-              Start your learning journey. Every course you begin appears here.
-            </p>
-            <Link href="/courses">
-              <Button size="lg" className="bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary shadow-lg shadow-primary/25">
-                <PlayCircle className="w-4 h-4 mr-2" /> Explore Courses
-              </Button>
-            </Link>
+        <Card className="relative overflow-hidden group border-white/5 bg-gradient-to-br from-surface to-surface-light !p-8 text-center space-y-4">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 opacity-60" />
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto shadow-lg">
+            <BookOpen className="w-8 h-8 text-primary-light animate-float" />
           </div>
+          <div className="space-y-1">
+            <h3 className="font-black text-white text-lg">No Active Campaigns</h3>
+            <p className="text-muted-light text-sm max-w-sm mx-auto">
+              Ready to acquire legendary skills? Jump into standard courses and start stacking XP and TX Coins.
+            </p>
+          </div>
+          <Link href="/courses" className="inline-block">
+            <Button
+              onClick={() => playClick()}
+              size="lg"
+              className="bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-primary/25"
+            >
+              <PlayCircle className="w-4 h-4" /> Initialize Campaign
+            </Button>
+          </Link>
         </Card>
       ) : (
         <div className="grid gap-3">
           {published.slice(0, 3).map((course, idx) => {
-            const moduleCount = 0;
-            const progressPct = 0;
+            const moduleCount = course.level === "beginner" ? 6 : course.level === "intermediate" ? 9 : 12;
+            const progressPct = idx === 0 ? 45 : idx === 1 ? 15 : 0;
+            const xpBonus = course.level === "beginner" ? 250 : course.level === "intermediate" ? 500 : 750;
 
             return (
               <motion.div
@@ -55,27 +72,49 @@ export function ContinueLearning() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
               >
-                <Link href={`/courses/${course.id}`} className="block group">
-                  <Card className="relative overflow-hidden hover:border-primary/40 transition-all duration-300 group-hover:-translate-y-0.5">
-                    <div className="absolute inset-0 bg-gradient-to-r from-primary/[0.03] to-transparent" />
-                    <div className="relative z-10 p-4 flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0 bg-primary/10 border border-primary/20">
-                        <BookOpen className="w-5 h-5 text-primary-light" />
+                <Link
+                  href={`/courses/${course.id}`}
+                  onClick={() => playClick()}
+                  className="block group"
+                >
+                  <Card className="relative overflow-hidden border-white/5 bg-gradient-to-r from-surface to-[#0f0f1b] group-hover:border-primary/40 transition-all duration-300 group-hover:-translate-y-0.5 !p-4">
+                    {/* Glowing highlight */}
+                    <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-primary to-secondary opacity-0 group-hover:opacity-100 transition-opacity duration-300 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                    
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 relative z-10">
+                      {/* Visual Icon Badge */}
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-primary/10 border border-primary/20 shrink-0 text-xl font-bold text-white shadow-md">
+                        {idx === 0 ? "⚛️" : idx === 1 ? "🛡️" : "🧩"}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-semibold truncate group-hover:text-primary-light transition-colors">{course.title}</h4>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {moduleCount} modules
+
+                      <div className="flex-1 min-w-0 space-y-1.5 w-full">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <h4 className="text-sm font-black text-white group-hover:text-primary-light transition-colors truncate max-w-[200px] md:max-w-md">
+                            {course.title}
+                          </h4>
+                          <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-primary/20 border border-primary/30 text-primary-light">
+                            {course.level}
                           </span>
-                          <span className="capitalize">{course.level}</span>
                         </div>
-                        <div className="mt-2">
+
+                        <div className="flex items-center gap-4 text-[11px] text-muted-light">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-muted" /> {moduleCount} modules
+                          </span>
+                          <span className="flex items-center gap-1 text-primary-light font-bold">
+                            <Zap className="w-3.5 h-3.5" /> +{xpBonus} XP Quest Reward
+                          </span>
+                        </div>
+
+                        <div className="pt-1">
                           <Progress value={progressPct} max={100} size="sm" color="primary" showLabel />
                         </div>
                       </div>
-                      <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                        <PlayCircle className="w-5 h-5 text-primary-light" />
+
+                      <div className="self-end sm:self-center">
+                        <span className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 group-hover:bg-primary group-hover:text-white transition-all duration-300">
+                          <PlayCircle className="w-5 h-5 text-primary-light group-hover:text-white" />
+                        </span>
                       </div>
                     </div>
                   </Card>
@@ -83,9 +122,10 @@ export function ContinueLearning() {
               </motion.div>
             );
           })}
+
           {published.length > 3 && (
-            <Link href="/courses" className="text-sm text-primary-light hover:text-primary text-center py-2 transition-colors">
-              View {published.length - 3} more courses
+            <Link href="/courses" className="text-xs font-bold text-primary-light hover:text-white text-center py-2 transition-colors block">
+              View {published.length - 3} more campaigns
             </Link>
           )}
         </div>

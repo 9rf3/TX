@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import type { DbCourseWithInstructor } from "@/lib/types";
 
@@ -9,13 +9,13 @@ export function useCourses() {
   const [course, setCourse] = useState<CourseData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const sbRef = useRef(createClient());
 
   const fetchCourses = useCallback(async (includeUnpublished = false) => {
     setIsLoading(true);
     setError(null);
     try {
-      let query = supabase
+      let query = sbRef.current
         .from("courses")
         .select("*, instructor:profiles(*)")
         .order("created_at", { ascending: false });
@@ -35,13 +35,13 @@ export function useCourses() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   const fetchCourse = useCallback(async (id: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await sbRef.current
         .from("courses")
         .select("*, instructor:profiles(*)")
         .eq("id", id)
@@ -58,15 +58,15 @@ export function useCourses() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   const createCourse = async (courseData: Record<string, unknown>) => {
     setError(null);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await sbRef.current.auth.getUser();
       if (!userData.user) throw new Error("Not authenticated");
 
-      const { data, error: err } = await supabase
+      const { data, error: err } = await sbRef.current
         .from("courses")
         .insert([{ ...courseData, created_by: userData.user.id }])
         .select("*, instructor:profiles(*)")
@@ -87,7 +87,7 @@ export function useCourses() {
   const updateCourse = async (id: string, courseData: Record<string, unknown>) => {
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await sbRef.current
         .from("courses")
         .update({ ...courseData, updated_at: new Date().toISOString() })
         .eq("id", id)
@@ -110,7 +110,7 @@ export function useCourses() {
   const deleteCourse = async (id: string) => {
     setError(null);
     try {
-      const { error: err } = await supabase
+      const { error: err } = await sbRef.current
         .from("courses")
         .delete()
         .eq("id", id);

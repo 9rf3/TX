@@ -8,7 +8,7 @@ export function useCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
   const fetchedRef = useRef(false);
 
   const fetchCategories = useCallback(async () => {
@@ -17,7 +17,7 @@ export function useCategories() {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("categories")
         .select("*")
         .order("name", { ascending: true });
@@ -31,11 +31,11 @@ export function useCategories() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   const createCategory = async (name: string, slug: string) => {
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("categories")
         .insert([{ name, slug }])
         .select()
@@ -54,7 +54,7 @@ export function useCategories() {
 
   const updateCategory = async (id: string, updates: { name?: string; slug?: string }) => {
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("categories")
         .update(updates)
         .eq("id", id)
@@ -74,7 +74,7 @@ export function useCategories() {
 
   const deleteCategory = async (id: string) => {
     try {
-      const { error: err } = await supabase
+      const { error: err } = await supabaseRef.current
         .from("categories")
         .delete()
         .eq("id", id);

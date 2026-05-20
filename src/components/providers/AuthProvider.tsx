@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useRef } from "react";
 import { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -36,19 +36,22 @@ export function AuthProvider({
   const [user, setUser] = useState<User | null>(initialUser);
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [isLoading, setIsLoading] = useState(!initialUser);
-  const [supabase] = useState(() => createClient());
+  const supabaseRef = useRef(createClient());
   const router = useRouter();
+  const initialisedRef = useRef(false);
 
   useEffect(() => {
+    if (initialisedRef.current) return;
+    initialisedRef.current = true;
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabaseRef.current.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
 
       if (currentUser) {
-        // Fetch profile if user changed
-        const { data } = await supabase
+        const { data } = await supabaseRef.current
           .from("profiles")
           .select("*")
           .eq("id", currentUser.id)
@@ -69,7 +72,7 @@ export function AuthProvider({
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, supabase]);
+  }, [router]);
 
   const value = useMemo(() => ({ user, profile, isLoading }), [user, profile, isLoading]);
 

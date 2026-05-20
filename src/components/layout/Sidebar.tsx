@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, BookOpen, Trophy, User, MessageSquare, Users, Shield,
   GraduationCap, Zap, ChevronLeft, ChevronRight, Sparkles, X, LogOut, Tags,
+  Swords,
 } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { logout } from "@/actions/auth";
@@ -13,6 +14,7 @@ import { logout } from "@/actions/auth";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/courses", label: "Courses", icon: BookOpen },
+  { href: "/skills", label: "Skill Tree", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/ai-chat", label: "AI Assistant", icon: Sparkles },
   { href: "/friends", label: "Friends", icon: Users },

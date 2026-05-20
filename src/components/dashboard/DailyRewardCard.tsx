@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
   Gift, Zap, Flame, Clock, CheckCircle, Sparkles, Loader2,
-  Star, Diamond, Shield, ChevronRight,
+  Star, Diamond, Shield, ChevronRight, Lock
 } from "lucide-react";
+import { useSound } from "@/lib/hooks/useSound";
 
 interface DailyRewardCardProps {
   canClaim: boolean;
@@ -22,27 +23,24 @@ interface DailyRewardCardProps {
   rewardTier?: string;
 }
 
-const tierConfig = {
-  Bronze:  { color: '#cd7f32', glow: 'rgba(205,127,50,0.2)', gradient: 'from-amber-800/20 via-amber-700/10 to-amber-600/5', streakMin: 0 },
-  Silver:  { color: '#c0c0c0', glow: 'rgba(192,192,192,0.25)', gradient: 'from-slate-400/20 via-slate-300/10 to-slate-200/5', streakMin: 7 },
-  Gold:    { color: '#ffd700', glow: 'rgba(255,215,0,0.3)', gradient: 'from-yellow-500/20 via-yellow-400/10 to-yellow-300/5', streakMin: 14 },
-  Diamond: { color: '#b9f2ff', glow: 'rgba(185,242,255,0.3)', gradient: 'from-sky-400/20 via-sky-300/10 to-sky-200/5', streakMin: 30 },
-};
-
-const coinValues: Record<string, number> = { Bronze: 10, Silver: 15, Gold: 20, Diamond: 30 };
-const baseXp = 50;
+const dailyMilestones = [
+  { day: 1, xp: 50, coins: 5, reward: "Bronze Chest" },
+  { day: 2, xp: 75, coins: 10, reward: "Silver Chest" },
+  { day: 3, xp: 100, coins: 15, reward: "Gold Chest" },
+  { day: 4, xp: 125, coins: 20, reward: "Epic Booster" },
+  { day: 5, xp: 150, coins: 25, reward: "Legendary Booster" },
+  { day: 6, xp: 200, coins: 30, reward: "Cosmetics Key" },
+  { day: 7, xp: 500, coins: 100, reward: "Elite Crest + rare Badge" },
+];
 
 export function DailyRewardCard({
   canClaim, claiming, streak, longestStreak = 0, timeUntilNext, onClaim,
   claimResult, onClearResult, rewardTier = 'Bronze',
 }: DailyRewardCardProps) {
+  const { playRewardClaim, playCoinReward } = useSound();
   const [timeLeft, setTimeLeft] = useState(timeUntilNext);
   const [showResult, setShowResult] = useState(false);
   const hasClaimedRef = useRef(false);
-  const tier = tierConfig[rewardTier as keyof typeof tierConfig] || tierConfig.Bronze;
-  const streakBonus = Math.min(streak * 5, 100);
-  const totalXp = baseXp + streakBonus;
-  const coinReward = coinValues[rewardTier as keyof typeof coinValues] || 10;
 
   useEffect(() => { setTimeLeft(timeUntilNext); }, [timeUntilNext]);
 
@@ -56,311 +54,204 @@ export function DailyRewardCard({
     if (claimResult && !hasClaimedRef.current) {
       hasClaimedRef.current = true;
       setShowResult(true);
+      playRewardClaim();
+      setTimeout(() => playCoinReward(), 200);
       const timer = setTimeout(() => {
         setShowResult(false);
         onClearResult();
-      }, 5000);
+      }, 6000);
       return () => clearTimeout(timer);
     }
     if (!claimResult) {
       hasClaimedRef.current = false;
       setShowResult(false);
     }
-  }, [claimResult, onClearResult]);
+  }, [claimResult, onClearResult, playRewardClaim, playCoinReward]);
 
   const hours = Math.floor(timeLeft / 3600000);
   const minutes = Math.floor((timeLeft % 3600000) / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
   const canClaimNow = canClaim && !claiming;
 
-  const StreakIcon = rewardTier === 'Diamond' ? Diamond
-    : rewardTier === 'Gold' ? Star
-    : rewardTier === 'Silver' ? Shield
-    : Flame;
+  // Visual position in the 7 day cycle (1-indexed, loop back to 1 after 7)
+  const currentCycleDay = ((streak) % 7) || 7;
 
   return (
-    <Card className="relative overflow-hidden group" hover={false}>
-      {/* Animated gradient background */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${tier.gradient} opacity-80`} />
-      <div
-        className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-3xl transition-all duration-1000 group-hover:scale-110"
-        style={{ background: tier.glow }}
-      />
-      <div
-        className="absolute -bottom-24 -left-24 w-48 h-48 rounded-full blur-3xl opacity-60"
-        style={{ background: tier.glow }}
-      />
+    <Card className="relative overflow-hidden group border-primary/20 bg-gradient-to-br from-surface to-[#0e0e1b] shadow-xl !p-5" hover={false}>
+      {/* Background gradients */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent-pink/5 opacity-80 pointer-events-none" />
+      <div className="absolute -top-24 -right-24 w-48 h-48 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-24 w-48 h-48 rounded-full bg-accent-pink/5 blur-3xl pointer-events-none" />
 
-      {/* Corner ornament */}
-      <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden">
-        <div className="absolute top-0 right-0 w-28 h-28 -mr-10 -mt-10 rotate-45 opacity-10"
-          style={{ backgroundColor: tier.color }} />
-      </div>
-
-      <div className="relative z-10 p-5">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <motion.div
-              className="relative"
-              animate={canClaimNow ? { scale: [1, 1.05, 1], rotate: [0, -3, 3, 0] } : {}}
-              transition={{ repeat: canClaimNow ? Infinity : 0, duration: 2 }}
-            >
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                style={{
-                  background: `${tier.color}15`,
-                  borderColor: `${tier.color}30`,
-                  borderWidth: 1,
-                }}
-              >
-                <Gift size={22} style={{ color: tier.color }} />
-              </div>
-              {canClaimNow && (
-                <motion.div
-                  className="absolute -inset-1 rounded-2xl"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: [0, 0.4, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
-                  style={{ border: `2px solid ${tier.color}`, boxShadow: `0 0 12px ${tier.glow}` }}
-                />
-              )}
-            </motion.div>
+      <div className="relative z-10 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center">
+              <Gift className="w-5 h-5 text-primary-light animate-float" />
+            </div>
             <div>
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                Daily Reward
-                {claimResult && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                    style={{ backgroundColor: `${tier.color}20`, color: tier.color }}
-                  >
-                    Claimed!
-                  </motion.span>
-                )}
-              </h3>
-              <p className="text-[10px] text-muted">Login every day for bigger bonuses</p>
+              <h3 className="text-sm font-black text-white uppercase tracking-wider">Daily Login Rewards</h3>
+              <p className="text-[10px] text-muted-light">Claim premium daily bundles to boost your XP rank</p>
             </div>
           </div>
 
-          {/* Streak badge */}
-          <motion.div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-            style={{
-              background: `${tier.color}15`,
-              borderColor: `${tier.color}25`,
-              borderWidth: 1,
-            }}
-            animate={streak >= 7 ? { scale: [1, 1.03, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 3 }}
-          >
-            <Flame size={14} style={{ color: tier.color }} />
-            <span className="text-sm font-bold tabular-nums" style={{ color: tier.color }}>{streak}</span>
-            <span className="text-[10px] text-muted">day{streak !== 1 ? 's' : ''}</span>
-          </motion.div>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-orange/10 border border-accent-orange/20">
+            <Flame className="w-3.5 h-3.5 text-accent-orange animate-pulse" />
+            <span className="text-xs font-black text-accent-orange tabular-nums">{streak}</span>
+            <span className="text-[9px] uppercase tracking-wider text-muted font-bold">Days</span>
+          </div>
         </div>
 
-        {/* Reward preview chips */}
+        {/* 7-Day rewards progression track */}
+        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+          {dailyMilestones.map((m) => {
+            const isCompleted = m.day < currentCycleDay || (m.day === currentCycleDay && !canClaimNow && streak > 0);
+            const isCurrent = m.day === currentCycleDay && canClaimNow;
+            const isUpcoming = m.day > currentCycleDay || (m.day === currentCycleDay && !canClaimNow && streak === 0);
+
+            return (
+              <div
+                key={m.day}
+                className={`relative p-2.5 rounded-xl border text-center flex flex-col items-center justify-between min-h-[85px] transition-all duration-300 ${
+                  isCompleted
+                    ? "bg-primary/10 border-primary/30 opacity-60"
+                    : isCurrent
+                    ? "bg-gradient-to-b from-primary/20 to-accent-pink/15 border-primary shadow-[0_0_15px_rgba(139,92,246,0.25)] scale-[1.04]"
+                    : "bg-white/[0.01] border-white/5 opacity-80"
+                }`}
+              >
+                {/* Visual day identifier */}
+                <div className="text-[9px] font-black uppercase text-muted">D{m.day}</div>
+
+                {/* Reward preview icon */}
+                <div className="my-1.5 select-none">
+                  {isCompleted ? (
+                    <CheckCircle className="w-5 h-5 text-accent-green" />
+                  ) : m.day === 7 ? (
+                    <Diamond className={`w-5 h-5 text-yellow-400 ${isCurrent ? "animate-bounce" : "animate-float"}`} />
+                  ) : (
+                    <Zap className={`w-5 h-5 ${isCurrent ? "text-primary-light" : "text-muted-light"}`} />
+                  )}
+                </div>
+
+                {/* Reward value label */}
+                <div className="space-y-0.5">
+                  <div className={`text-[10px] font-black ${isCurrent ? "text-primary-light" : "text-white"}`}>
+                    +{m.xp} XP
+                  </div>
+                  <div className="text-[8px] text-muted-light">
+                    +{m.coins} TX
+                  </div>
+                </div>
+
+                {/* Glowing pulsing dot for active claim state */}
+                {isCurrent && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-accent-pink border border-white animate-ping" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Claim Experience Overlay / Cooldown view */}
         <AnimatePresence mode="wait">
           {showResult && claimResult ? (
             <motion.div
               key="result"
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="py-4"
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="rounded-2xl bg-gradient-to-r from-primary/15 via-accent-pink/10 to-primary/10 border border-primary/30 p-4 text-center space-y-3 relative overflow-hidden"
             >
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                  style={{
-                    background: `${tier.color}20`,
-                    borderColor: `${tier.color}30`,
-                    borderWidth: 1,
-                  }}
-                >
-                  <CheckCircle size={30} style={{ color: tier.color }} />
-                </motion.div>
+              {/* Confetti or spark glow backlights */}
+              <div className="absolute inset-0 bg-gradient-mesh opacity-30 pointer-events-none" />
+
+              <div className="flex justify-center gap-1">
+                <Sparkles className="w-6 h-6 text-yellow-400 animate-spin" />
+                <h4 className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-500 uppercase tracking-widest">
+                  Daily Bundle Acquired!
+                </h4>
               </div>
 
-              <h4 className="text-center text-base font-bold mb-3" style={{ color: tier.color }}>
-                Reward Claimed!
-              </h4>
-
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl"
-                  style={{ background: `${tier.color}12` }}
-                >
-                  <Zap size={16} className="text-primary-light" />
-                  <span className="font-bold text-sm" style={{ color: tier.color }}>+{claimResult.xp}</span>
-                  <span className="text-[10px] text-muted">XP</span>
+              <div className="flex justify-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/20 border border-primary/30">
+                  <Zap className="w-4 h-4 text-primary-light" />
+                  <span className="text-xs font-black text-white">+{claimResult.xp} XP</span>
                   {claimResult.streakBonus > 0 && (
-                    <span className="text-[9px] text-muted">(bonus +{claimResult.streakBonus})</span>
+                    <span className="text-[9px] text-muted-light">(+{claimResult.streakBonus} Streak Bonus)</span>
                   )}
-                </motion.div>
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl"
-                  style={{ background: `${tier.color}12` }}
-                >
-                  <Sparkles size={16} style={{ color: tier.color }} />
-                  <span className="font-bold text-sm" style={{ color: tier.color }}>+{claimResult.coins}</span>
-                  <span className="text-[10px] text-muted">TX</span>
-                </motion.div>
-                {claimResult.leveledUp && (
-                  <motion.div
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent-green/15 text-accent-green text-sm font-bold"
-                  >
-                    <Star size={16} /> LEVEL UP!
-                  </motion.div>
-                )}
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-400/10 border border-yellow-400/20">
+                  <Sparkles className="w-4 h-4 text-yellow-400" />
+                  <span className="text-xs font-black text-yellow-400">+{claimResult.coins} Coins</span>
+                </div>
               </div>
 
-              {/* Progress bar countdown */}
-              <motion.div
-                initial={{ width: "100%" }}
-                animate={{ width: "0%" }}
-                transition={{ duration: 5, ease: "linear" }}
-                className="h-0.5 rounded-full mt-4 mx-auto"
-                style={{ backgroundColor: tier.color, maxWidth: '80%' }}
-              />
+              {/* Autoclose countdown progress indicator */}
+              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-primary to-accent-pink rounded-full"
+                  initial={{ width: "100%" }}
+                  animate={{ width: "0%" }}
+                  transition={{ duration: 6, ease: "linear" }}
+                />
+              </div>
             </motion.div>
           ) : canClaimNow ? (
             <motion.div
               key="claim"
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={{ opacity: 0 }}
             >
-              {/* Reward preview */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {[
-                  { icon: Zap, label: 'Base XP', value: `+${baseXp}`, sub: 'Daily' },
-                  { icon: Flame, label: 'Streak', value: `+${streakBonus}`, sub: `${streak} day${streak !== 1 ? 's' : ''}` },
-                  { icon: Sparkles, label: 'Coins', value: `+${coinReward}`, sub: rewardTier === 'Bronze' ? 'TX Coins' : `${rewardTier} Tier` },
-                ].map((item, i) => (
-                  <motion.div
-                    key={item.label}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="text-center p-2 rounded-xl"
-                    style={{ background: `${tier.color}08` }}
-                  >
-                    <item.icon size={16} className="mx-auto mb-1" style={{ color: tier.color }} />
-                    <div className="text-sm font-bold tabular-nums" style={{ color: tier.color }}>{item.value}</div>
-                    <div className="text-[9px] text-muted">{item.sub}</div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Total XP display */}
-              <div className="flex items-center justify-center gap-1.5 mb-3 text-xs text-muted">
-                <Zap size={12} className="text-primary-light" />
-                <span className="font-medium text-primary-light">+{baseXp + streakBonus} XP total</span>
-              </div>
-
-              {/* Next tier info */}
-              {streak < 30 && (
-                <div className="text-center mb-3">
-                  <div className="text-[9px] text-muted">
-                    {streak < 7
-                      ? `${7 - streak} more days to Silver tier`
-                      : streak < 14
-                        ? `${14 - streak} more days to Gold tier`
-                        : `${30 - streak} more days to Diamond tier`
-                    }
-                  </div>
-                </div>
-              )}
-
               <Button
                 onClick={onClaim}
                 disabled={claiming}
                 size="lg"
-                className="w-full font-bold shadow-lg text-sm"
+                className="w-full font-black text-xs uppercase tracking-wider rounded-xl shadow-lg animate-pulse-glow"
                 style={{
-                  background: `linear-gradient(135deg, ${tier.color}, ${tier.color}dd)`,
-                  color: '#000',
-                  boxShadow: `0 4px 20px ${tier.glow}`,
+                  background: `linear-gradient(135deg, var(--color-primary), var(--color-accent-pink))`,
+                  color: "#ffffff",
+                  boxShadow: `0 4px 20px rgba(139, 92, 246, 0.4)`,
                 }}
               >
                 {claiming ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Claiming...</>
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Fetching Daily Bundle...
+                  </span>
                 ) : (
-                  <><Gift className="w-4 h-4 mr-2" /> Claim Daily Reward</>
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Gift className="w-4 h-4" /> Claim Day {currentCycleDay} Rewards
+                  </span>
                 )}
               </Button>
             </motion.div>
           ) : (
             <motion.div
               key="cooldown"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="py-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-xl border border-white/5 bg-white/[0.01]"
             >
-              {/* Streak info */}
-              {streak > 0 && (
-                <div className="flex items-center justify-center gap-2 mb-3 text-xs">
-                  <Flame size={14} style={{ color: tier.color }} />
-                  <span style={{ color: tier.color }} className="font-semibold">{streak}-day streak</span>
-                  {longestStreak > streak && (
-                    <span className="text-muted">· Best: {longestStreak}</span>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center justify-center gap-2 mb-3">
+              <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted" />
-                <span className="text-sm text-muted">Next reward in</span>
+                <span className="text-xs text-muted-light">Next daily reward available in:</span>
               </div>
 
-              <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="flex gap-2">
                 {[
-                  { value: hours, label: 'h' },
-                  { value: minutes, label: 'm' },
-                  { value: seconds, label: 's' },
-                ].map((unit, i) => (
-                  <motion.div
-                    key={unit.label}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="text-center"
-                  >
-                    <div
-                      className="w-14 h-14 rounded-xl flex items-center justify-center"
-                      style={{
-                        background: `${tier.color}08`,
-                        borderColor: `${tier.color}15`,
-                        borderWidth: 1,
-                      }}
-                    >
-                      <span className="text-xl font-black tabular-nums" style={{ color: tier.color }}>
-                        {String(unit.value).padStart(2, '0')}
-                      </span>
-                    </div>
-                    <div className="text-[9px] text-muted mt-0.5 uppercase">{unit.label}</div>
-                  </motion.div>
+                  { val: hours, unit: "H" },
+                  { val: minutes, unit: "M" },
+                  { val: seconds, unit: "S" },
+                ].map((u, i) => (
+                  <div key={i} className="flex items-center gap-0.5 bg-white/5 border border-white/10 px-2 py-1 rounded-md">
+                    <span className="text-xs font-black text-white tabular-nums">{String(u.val).padStart(2, "0")}</span>
+                    <span className="text-[8px] text-muted font-bold">{u.unit}</span>
+                  </div>
                 ))}
-              </div>
-
-              <div className="flex items-center justify-center text-[10px] text-muted">
-                <StreakIcon size={10} className="mr-1" style={{ color: tier.color }} />
-                Next tier: {streak < 7 ? 'Silver (7 days)' : streak < 14 ? 'Gold (14 days)' : 'Diamond (30 days)'}
               </div>
             </motion.div>
           )}

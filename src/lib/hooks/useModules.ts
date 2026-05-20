@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import type { DbCourseModule } from "@/lib/types";
 
@@ -8,7 +8,7 @@ export function useModules(courseId?: string) {
   const [modules, setModules] = useState<CourseModule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
 
   const fetchModules = useCallback(async (cId?: string) => {
     const targetCourseId = cId || courseId;
@@ -17,7 +17,7 @@ export function useModules(courseId?: string) {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("course_modules")
         .select("*")
         .eq("course_id", targetCourseId)
@@ -32,11 +32,11 @@ export function useModules(courseId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [courseId, supabase]);
+  }, [courseId]);
 
   const createModule = async (moduleData: Partial<CourseModule> & { course_id?: string }) => {
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("course_modules")
         .insert([{
           ...moduleData,
@@ -58,7 +58,7 @@ export function useModules(courseId?: string) {
 
   const updateModule = async (id: string, moduleData: Partial<CourseModule>) => {
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("course_modules")
         .update({ ...moduleData, updated_at: new Date().toISOString() })
         .eq("id", id)
@@ -78,7 +78,7 @@ export function useModules(courseId?: string) {
 
   const deleteModule = async (id: string) => {
     try {
-      const { error: err } = await supabase
+      const { error: err } = await supabaseRef.current
         .from("course_modules")
         .delete()
         .eq("id", id);
@@ -99,7 +99,7 @@ export function useModules(courseId?: string) {
         order_index: i
       }));
 
-      const { error: err } = await supabase
+      const { error: err } = await supabaseRef.current
         .from("course_modules")
         .upsert(updates);
 

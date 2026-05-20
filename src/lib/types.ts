@@ -214,6 +214,33 @@ export interface DbCategory {
   created_at: string;
 }
 
+// ─── Skill Tree types ─────────────────────────────────────────────────────────
+
+export interface SkillNode {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  icon: string;
+  max_level: number;
+  parent_skill_id: string | null;
+  position_x: number;
+  position_y: number;
+}
+
+export interface UserSkillProgress {
+  skill_id: string;
+  current_level: number;
+  points_invested: number;
+}
+
+export interface SkillTreeData {
+  skills: SkillNode[];
+  userProgress: UserSkillProgress[];
+  availablePoints: number;
+  userLevel: number;
+}
+
 export interface DbCourseModule {
   id: string;
   course_id: string;

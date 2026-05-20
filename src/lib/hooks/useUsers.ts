@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import type { UserRole } from "@/lib/types";
 
@@ -17,13 +17,13 @@ export function useUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
+      const { data, error: err } = await supabaseRef.current
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });

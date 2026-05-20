@@ -3,13 +3,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, BookOpen, Trophy, Sparkles, User } from "lucide-react";
+import { LayoutDashboard, BookOpen, Trophy, User, Swords } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/courses", label: "Courses", icon: BookOpen },
+  { href: "/skills", label: "Skills", icon: Swords },
   { href: "/leaderboard", label: "Rank", icon: Trophy },
-  { href: "/ai-chat", label: "AI", icon: Sparkles },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

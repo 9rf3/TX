@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { UserProfile } from "./useUsers";
 
@@ -25,17 +25,17 @@ export function useFriends() {
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
 
   const fetchFriends = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await supabaseRef.current.auth.getUser();
       if (!userData.user) return;
       const userId = userData.user.id;
 
       // Fetch friendships where user is either user_id_1 or user_id_2
-      const { data: fData, error: fErr } = await supabase
+      const { data: fData, error: fErr } = await supabaseRef.current
         .from("friendships")
         .select("*")
         .or(`user_id_1.eq.${userId},user_id_2.eq.${userId}`);
@@ -47,7 +47,7 @@ export function useFriends() {
       
       const profiles: Record<string, UserProfile> = {};
       if (otherUserIds.length > 0) {
-        const { data: pData, error: pErr } = await supabase
+        const { data: pData, error: pErr } = await supabaseRef.current
           .from("profiles")
           .select("*")
           .in("id", otherUserIds);
@@ -76,12 +76,12 @@ export function useFriends() {
   const fetchRequests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await supabaseRef.current.auth.getUser();
       if (!userData.user) return;
       const userId = userData.user.id;
 
       // Fetch pending requests where user is the receiver
-      const { data: rData, error: rErr } = await supabase
+      const { data: rData, error: rErr } = await supabaseRef.current
         .from("friend_requests")
         .select("*, sender:profiles!sender_id(*)")
         .eq("receiver_id", userId)
@@ -99,13 +99,13 @@ export function useFriends() {
 
   const sendRequest = async (receiverId: string) => {
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await supabaseRef.current.auth.getUser();
       if (!userData.user) throw new Error("Not authenticated");
       const senderId = userData.user.id;
 
       if (senderId === receiverId) throw new Error("Cannot add yourself");
 
-      const { error: err } = await supabase
+      const { error: err } = await supabaseRef.current
         .from("friend_requests")
         .insert([{ sender_id: senderId, receiver_id: receiverId }]);
 
@@ -119,7 +119,7 @@ export function useFriends() {
 
   const acceptRequest = async (requestId: string) => {
     try {
-      const { error: err } = await supabase.rpc("accept_friend_request", { request_id: requestId });
+      const { error: err } = await supabaseRef.current.rpc("accept_friend_request", { request_id: requestId });
       if (err) throw err;
       
       // Refresh state
@@ -134,7 +134,7 @@ export function useFriends() {
 
   const rejectRequest = async (requestId: string) => {
     try {
-      const { error: err } = await supabase
+      const { error: err } = await supabaseRef.current
         .from("friend_requests")
         .update({ status: "rejected" })
         .eq("id", requestId);
