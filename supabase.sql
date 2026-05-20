@@ -1106,3 +1106,508 @@ comment on function public.claim_daily_reward_safe is 'All-in-one daily reward c
 
 create index if not exists idx_profiles_longest_streak on public.profiles(longest_streak desc);
 create index if not exists idx_profiles_total_coins on public.profiles(total_coins_earned desc);
+
+-- ==================================================================
+-- PHASE 3: PREMIUM PROFILE — SHOP, INVENTORY, PORTFOLIO, COSMETICS
+-- ==================================================================
+
+-- Extend profiles with premium profile fields
+alter table public.profiles
+  add column if not exists display_name text,
+  add column if not exists bio text,
+  add column if not exists country text,
+  add column if not exists university text,
+  add column if not exists focus_areas text[],
+  add column if not exists github_username text,
+  add column if not exists profile_banner text,
+  add column if not exists profile_theme text default 'default',
+  add column if not exists profile_accent text default 'primary',
+  add column if not exists selected_avatar text,
+  add column if not exists tournaments_won integer not null default 0,
+  add column if not exists pvp_won integer not null default 0,
+  add column if not exists practice_hours integer not null default 0,
+  add column if not exists quiz_accuracy real not null default 0;
+
+do $$ begin
+  alter table public.profiles add constraint profiles_tournaments_won_check check (tournaments_won >= 0);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.profiles add constraint profiles_pvp_won_check check (pvp_won >= 0);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.profiles add constraint profiles_practice_hours_check check (practice_hours >= 0);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.profiles add constraint profiles_quiz_accuracy_check check (quiz_accuracy >= 0 and quiz_accuracy <= 100);
+exception when duplicate_object then null;
+end $$;
+
+comment on column public.profiles.display_name is 'Stylized display name shown on profile (can differ from username)';
+comment on column public.profiles.bio is 'Player bio showcasing goals and interests';
+comment on column public.profiles.country is 'Country of residence';
+comment on column public.profiles.university is 'University or educational institution';
+comment on column public.profiles.focus_areas is 'Learning focus areas (e.g.: Frontend, Backend, AI/ML)';
+comment on column public.profiles.github_username is 'Linked GitHub username for portfolio integration';
+comment on column public.profiles.profile_banner is 'URL to equipped profile banner image';
+comment on column public.profiles.profile_theme is 'Equipped profile theme identifier';
+comment on column public.profiles.profile_accent is 'Equipped accent color identifier';
+comment on column public.profiles.selected_avatar is 'Selected avatar: preset-1..10 or custom upload URL';
+
+-- --- Shop items catalog ---
+
+create table if not exists public.shop_items (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  description text,
+  item_type text not null check (item_type in ('avatar_frame', 'profile_banner', 'profile_theme', 'profile_accent', 'avatar', 'effect', 'badge')),
+  rarity text not null default 'common' check (rarity in ('common', 'rare', 'epic', 'legendary')),
+  image_url text,
+  preview_url text,
+  price_coins integer not null default 0,
+  price_xp integer not null default 0,
+  level_requirement integer not null default 1,
+  tier_requirement text,
+  is_limited boolean default false,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.shop_items enable row level security;
+
+do $$ begin
+  alter table public.shop_items add constraint shop_items_price_coins_check check (price_coins >= 0);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.shop_items add constraint shop_items_price_xp_check check (price_xp >= 0);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter table public.shop_items add constraint shop_items_level_req_check check (level_requirement >= 1);
+exception when duplicate_object then null;
+end $$;
+
+comment on table public.shop_items is 'Catalog of purchasable cosmetic items for profile customization';
+
+-- Insert default shop items
+insert into public.shop_items (name, description, item_type, rarity, image_url, price_coins, price_xp, level_requirement) values
+  ('Neon Blade Frame',    'A sharp neon-edged avatar frame',    'avatar_frame',  'rare',     '/frames/neon-blade.png',     500,  0,    5),
+  ('Royal Crown Frame',   'A majestic golden crown frame',      'avatar_frame',  'epic',     '/frames/royal-crown.png',    1500, 500,  15),
+  ('Diamond Halo Frame',  'Ethereal diamond dust halo',         'avatar_frame',  'legendary','/frames/diamond-halo.png',   5000, 2000, 50),
+  ('Cyberpunk Banner',    'Neon-lit city skyline banner',       'profile_banner','rare',     '/banners/cyberpunk.png',     800,  0,    10),
+  ('Galaxy Banner',       'Deep space nebula banner',           'profile_banner','epic',     '/banners/galaxy.png',        2500, 1000, 25),
+  ('Dark Theme',          'Sleek dark cosmetic theme',           'profile_theme', 'common',   null,                        200,  0,    3),
+  ('Plasma Theme',        'Energetic plasma glow theme',        'profile_theme', 'rare',     null,                        1000, 300,  10),
+  ('Nebula Theme',        'Cosmic nebula color theme',          'profile_theme', 'epic',     null,                        3000, 1500, 30),
+  ('Neon Accent',         'Vibrant neon pink accent',           'profile_accent','rare',     null,                        400,  0,    5),
+  ('Gold Accent',         'Premium gold accent color',          'profile_accent','epic',     null,                        2000, 500,  20),
+  ('Crystal Accent',      'Rare crystal cyan accent',           'profile_accent','legendary',null,                        5000, 2000, 50),
+  ('Phoenix Avatar',      'Legendary phoenix avatar',           'avatar',        'legendary','/avatars/phoenix.png',      8000, 5000, 75),
+  ('Shadow Badge',        'Dark shadow operative badge',        'badge',         'rare',     '/badges/shadow.png',         600,  0,    8),
+  ('Legend Badge',        'Legendary status badge',             'badge',         'legendary','/badges/legend.png',        10000, 5000, 100),
+  ('XP Boost Effect',     'Golden XP particles effect',         'effect',        'epic',     null,                        3000, 1000, 20)
+on conflict do nothing;
+
+-- --- User inventory (owned items) ---
+
+create table if not exists public.user_inventory (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  item_id uuid references public.shop_items(id) on delete cascade not null,
+  purchased_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  is_equipped boolean default false not null,
+  unique(user_id, item_id)
+);
+
+alter table public.user_inventory enable row level security;
+
+do $$ begin
+  create policy "Users can view their own inventory." on public.user_inventory for select using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can insert their own inventory." on public.user_inventory for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own inventory." on public.user_inventory for update using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+comment on table public.user_inventory is 'Tracks which cosmetic items each user owns and their equip status';
+
+-- --- Portfolio projects ---
+
+create table if not exists public.portfolio_projects (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text not null,
+  description text,
+  image_url text,
+  project_url text,
+  github_url text,
+  tags text[],
+  is_featured boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.portfolio_projects enable row level security;
+
+create index if not exists idx_portfolio_projects_user on public.portfolio_projects(user_id);
+
+do $$ begin
+  create policy "Portfolio projects are viewable by everyone." on public.portfolio_projects for select using (true);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can insert their own projects." on public.portfolio_projects for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own projects." on public.portfolio_projects for update using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own projects." on public.portfolio_projects for delete using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+comment on table public.portfolio_projects is 'User portfolio project showcase';
+
+-- --- Certificates ---
+
+create table if not exists public.certificates (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text not null,
+  issuer text,
+  image_url text,
+  issued_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.certificates enable row level security;
+
+create index if not exists idx_certificates_user on public.certificates(user_id);
+
+do $$ begin
+  create policy "Certificates are viewable by everyone." on public.certificates for select using (true);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can insert their own certificates." on public.certificates for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own certificates." on public.certificates for update using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own certificates." on public.certificates for delete using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+comment on table public.certificates is 'User certificate uploads for portfolio display';
+
+-- --- User enrollments (course progress tracking) ---
+
+create table if not exists public.user_enrollments (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  course_id uuid references public.courses(id) on delete cascade not null,
+  progress integer default 0,
+  completed boolean default false,
+  enrolled_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  completed_at timestamp with time zone,
+  unique(user_id, course_id)
+);
+
+alter table public.user_enrollments enable row level security;
+
+create index if not exists idx_user_enrollments_user on public.user_enrollments(user_id);
+create index if not exists idx_user_enrollments_course on public.user_enrollments(course_id);
+
+do $$ begin
+  create policy "Users can view their own enrollments." on public.user_enrollments for select using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can insert their own enrollments." on public.user_enrollments for insert with check (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own enrollments." on public.user_enrollments for update using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;
+
+comment on table public.user_enrollments is 'Tracks user course enrollment and completion progress';
+
+-- --- Storage buckets for profile content ---
+
+insert into storage.buckets (id, name, public) values ('profile-avatars', 'profile-avatars', true) on conflict do nothing;
+insert into storage.buckets (id, name, public) values ('profile-banners', 'profile-banners', true) on conflict do nothing;
+insert into storage.buckets (id, name, public) values ('certificates', 'certificates', true) on conflict do nothing;
+insert into storage.buckets (id, name, public) values ('portfolio', 'portfolio', true) on conflict do nothing;
+
+do $$ begin
+  create policy "Profile avatars are publicly accessible." on storage.objects for select using (bucket_id = 'profile-avatars');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can upload their own avatar." on storage.objects for insert with check (
+    bucket_id = 'profile-avatars' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own avatar." on storage.objects for update using (
+    bucket_id = 'profile-avatars' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own avatar." on storage.objects for delete using (
+    bucket_id = 'profile-avatars' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Profile banners are publicly accessible." on storage.objects for select using (bucket_id = 'profile-banners');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can upload their own banner." on storage.objects for insert with check (
+    bucket_id = 'profile-banners' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can update their own banner." on storage.objects for update using (
+    bucket_id = 'profile-banners' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own banner." on storage.objects for delete using (
+    bucket_id = 'profile-banners' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Certificates are publicly accessible." on storage.objects for select using (bucket_id = 'certificates');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can upload certificates." on storage.objects for insert with check (
+    bucket_id = 'certificates' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own certificates." on storage.objects for delete using (
+    bucket_id = 'certificates' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Portfolio images are publicly accessible." on storage.objects for select using (bucket_id = 'portfolio');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can upload portfolio images." on storage.objects for insert with check (
+    bucket_id = 'portfolio' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create policy "Users can delete their own portfolio images." on storage.objects for delete using (
+    bucket_id = 'portfolio' and auth.uid() is not null
+  );
+exception when duplicate_object then null;
+end $$;
+
+-- === Equip item function ===
+create or replace function public.equip_item_safe(
+  p_user_id uuid,
+  p_item_id uuid
+)
+returns jsonb
+language plpgsql security definer
+as $$
+declare
+  v_item_type text;
+  v_item_name text;
+  v_owned boolean;
+begin
+  -- Check ownership
+  select exists(select 1 from public.user_inventory where user_id = p_user_id and item_id = p_item_id)
+  into v_owned;
+
+  if not v_owned then
+    return jsonb_build_object('success', false, 'error', 'Item not owned');
+  end if;
+
+  -- Get item type
+  select item_type, name into v_item_type, v_item_name
+  from public.shop_items where id = p_item_id;
+
+  -- Unequip same type
+  update public.user_inventory ui
+  set is_equipped = false
+  from public.shop_items si
+  where ui.item_id = si.id
+    and si.item_type = v_item_type
+    and ui.user_id = p_user_id;
+
+  -- Equip new item
+  update public.user_inventory
+  set is_equipped = true
+  where user_id = p_user_id and item_id = p_item_id;
+
+  -- Update profile based on item type
+  case v_item_type
+    when 'avatar_frame' then
+      update public.profiles set selected_avatar = v_item_name where id = p_user_id;
+    when 'profile_banner' then
+      update public.profiles set profile_banner = v_item_name where id = p_user_id;
+    when 'profile_theme' then
+      update public.profiles set profile_theme = v_item_name where id = p_user_id;
+    when 'profile_accent' then
+      update public.profiles set profile_accent = v_item_name where id = p_user_id;
+    else
+      -- badge/effect/avatar - no direct profile column update needed
+  end case;
+
+  return jsonb_build_object('success', true, 'item_type', v_item_type, 'item_name', v_item_name);
+end;
+$$;
+
+comment on function public.equip_item_safe is 'Transaction-safe equip: unequips same type, equips new item, updates profile';
+
+-- === Purchase item function ===
+create or replace function public.purchase_item_safe(
+  p_user_id uuid,
+  p_item_id uuid
+)
+returns jsonb
+language plpgsql security definer
+as $$
+declare
+  v_price_coins integer;
+  v_price_xp integer;
+  v_level_req integer;
+  v_has_coins boolean;
+  v_has_xp boolean;
+  v_has_level boolean;
+  v_user_level integer;
+  v_user_coins integer;
+  v_user_xp integer;
+  v_owned boolean;
+begin
+  -- Check not already owned
+  select exists(select 1 from public.user_inventory where user_id = p_user_id and item_id = p_item_id)
+  into v_owned;
+
+  if v_owned then
+    return jsonb_build_object('success', false, 'error', 'Already owned');
+  end if;
+
+  -- Get item details
+  select price_coins, price_xp, level_requirement
+  into v_price_coins, v_price_xp, v_level_req
+  from public.shop_items
+  where id = p_item_id and is_active = true;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'Item not found or not available');
+  end if;
+
+  -- Get user state (with row lock)
+  select level, tx_coins, xp
+  into v_user_level, v_user_coins, v_user_xp
+  from public.profiles
+  where id = p_user_id
+  for update;
+
+  v_has_level := v_user_level >= v_level_req;
+  v_has_coins := v_user_coins >= v_price_coins;
+  v_has_xp := v_user_xp >= v_price_xp;
+
+  if not v_has_level then
+    return jsonb_build_object('success', false, 'error', 'Level requirement not met',
+      'required_level', v_level_req, 'current_level', v_user_level);
+  end if;
+
+  if not v_has_coins then
+    return jsonb_build_object('success', false, 'error', 'Not enough TX Coins',
+      'required', v_price_coins, 'available', v_user_coins);
+  end if;
+
+  if not v_has_xp then
+    return jsonb_build_object('success', false, 'error', 'Not enough XP',
+      'required', v_price_xp, 'available', v_user_xp);
+  end if;
+
+  -- Deduct costs
+  update public.profiles
+  set tx_coins = tx_coins - v_price_coins
+  where id = p_user_id;
+
+  -- Log coin spend
+  insert into public.coin_events (user_id, amount, balance_after, reason, metadata)
+  values (p_user_id, -v_price_coins, v_user_coins - v_price_coins, 'shop_purchase',
+    jsonb_build_object('item_id', p_item_id));
+
+  -- Add to inventory
+  insert into public.user_inventory (user_id, item_id)
+  values (p_user_id, p_item_id);
+
+  return jsonb_build_object('success', true,
+    'coins_spent', v_price_coins, 'balance', v_user_coins - v_price_coins);
+end;
+$$;
+
+comment on function public.purchase_item_safe is 'Transaction-safe purchase: validates requirements, deducts cost, adds to inventory';
+
+-- === Realtime publication for new tables ===
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    perform supabase_realtime.add_table('public', 'user_inventory');
+    perform supabase_realtime.add_table('public', 'user_enrollments');
+  end if;
+exception when sqlstate '3F000' then
+  null;
+end $$;

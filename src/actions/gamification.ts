@@ -58,7 +58,7 @@ export async function getGamificationProfile() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, email, full_name, username, avatar_url, role, xp, level, tx_coins, current_streak, longest_streak, last_reward_claimed_at, total_xp_earned, total_coins_earned, last_active_at')
+    .select('*')
     .eq('id', user.id)
     .single()
 

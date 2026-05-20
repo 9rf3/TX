@@ -2,29 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/providers/AuthProvider";
-import type { UserRole } from "@/lib/types";
-
-export interface GamificationProfile {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  username: string | null;
-  avatar_url: string | null;
-  role: UserRole;
-  xp: number;
-  level: number;
-  tx_coins: number;
-  current_streak: number;
-  longest_streak: number;
-  last_reward_claimed_at: string | null;
-  total_xp_earned: number;
-  total_coins_earned: number;
-  last_active_at: string | null;
-  rank: number;
-  totalUsers: number;
-  percentile: number;
-  xpForNext: number;
-}
+import type { GamificationProfile } from "@/lib/types";
 
 export function useGamificationEngine() {
   const { user } = useAuth();

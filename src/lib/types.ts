@@ -253,3 +253,206 @@ export interface DbCourseModule {
   created_at: string;
   updated_at: string;
 }
+
+// ─── Extended Profile types ──────────────────────────────────────────────────
+
+export interface ExtendedProfile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  role: UserRole;
+  xp: number;
+  level: number;
+  tx_coins: number;
+  current_streak: number;
+  longest_streak: number;
+  total_xp_earned: number;
+  total_coins_earned: number;
+  last_reward_claimed_at: string | null;
+  last_active_at: string | null;
+  tournaments_won: number;
+  pvp_won: number;
+  practice_hours: number;
+  quiz_accuracy: number;
+  // Premium profile fields
+  display_name: string | null;
+  bio: string | null;
+  country: string | null;
+  university: string | null;
+  focus_areas: string[] | null;
+  github_username: string | null;
+  profile_banner: string | null;
+  profile_theme: string | null;
+  profile_accent: string | null;
+  selected_avatar: string | null;
+  created_at: string;
+}
+
+export interface GamificationProfile extends ExtendedProfile {
+  rank: number;
+  totalUsers: number;
+  percentile: number;
+  xpForNext: number;
+}
+
+// ─── Shop types ──────────────────────────────────────────────────────────────
+
+export type ShopItemType = 'avatar_frame' | 'profile_banner' | 'profile_theme' | 'profile_accent' | 'avatar' | 'effect' | 'badge';
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  description: string | null;
+  item_type: ShopItemType;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  image_url: string | null;
+  preview_url: string | null;
+  price_coins: number;
+  price_xp: number;
+  level_requirement: number;
+  tier_requirement: string | null;
+  is_limited: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface UserInventoryItem {
+  id: string;
+  user_id: string;
+  item_id: string;
+  purchased_at: string;
+  is_equipped: boolean;
+  item: ShopItem;
+}
+
+// ─── Portfolio types ─────────────────────────────────────────────────────────
+
+export interface PortfolioProject {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  project_url: string | null;
+  github_url: string | null;
+  tags: string[] | null;
+  is_featured: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Certificate {
+  id: string;
+  user_id: string;
+  title: string;
+  issuer: string | null;
+  image_url: string | null;
+  issued_at: string | null;
+  created_at: string;
+}
+
+// ─── Enrollment types ────────────────────────────────────────────────────────
+
+export interface UserEnrollment {
+  id: string;
+  user_id: string;
+  course_id: string;
+  progress: number;
+  completed: boolean;
+  enrolled_at: string;
+  completed_at: string | null;
+  course?: DbCourse;
+}
+
+// ─── Rank tier config ────────────────────────────────────────────────────────
+
+export interface RankTierConfig {
+  name: string;
+  color: string;
+  gradient: string;
+  glow: string;
+  icon: string;
+  minLevel: number;
+  maxLevel: number;
+}
+
+export const RANK_TIERS: RankTierConfig[] = [
+  { name: 'Bronze',   color: '#cd7f32', gradient: 'from-amber-700/20 to-amber-600/10', glow: 'rgba(205,127,50,0.3)', icon: 'Shield', minLevel: 1, maxLevel: 10 },
+  { name: 'Silver',   color: '#c0c0c0', gradient: 'from-slate-300/20 to-slate-200/10', glow: 'rgba(192,192,192,0.3)', icon: 'Shield', minLevel: 11, maxLevel: 25 },
+  { name: 'Gold',     color: '#ffd700', gradient: 'from-yellow-400/20 to-yellow-300/10', glow: 'rgba(255,215,0,0.4)', icon: 'Medal', minLevel: 26, maxLevel: 50 },
+  { name: 'Platinum', color: '#e5e4e2', gradient: 'from-cyan-200/20 to-cyan-100/10', glow: 'rgba(229,228,226,0.3)', icon: 'Diamond', minLevel: 51, maxLevel: 75 },
+  { name: 'Diamond',  color: '#b9f2ff', gradient: 'from-sky-300/20 to-sky-200/10', glow: 'rgba(185,242,255,0.4)', icon: 'Diamond', minLevel: 76, maxLevel: 99 },
+  { name: 'Elite',    color: '#ff6b35', gradient: 'from-orange-400/20 to-red-400/10', glow: 'rgba(255,107,53,0.5)', icon: 'Crown', minLevel: 100, maxLevel: 999 },
+];
+
+export function getRankTier(level: number): RankTierConfig {
+  return RANK_TIERS.find(t => level >= t.minLevel && level <= t.maxLevel) || RANK_TIERS[0];
+}
+
+export function getNextRankTier(level: number): RankTierConfig | null {
+  const current = getRankTier(level);
+  const idx = RANK_TIERS.findIndex(t => t.name === current.name);
+  return idx < RANK_TIERS.length - 1 ? RANK_TIERS[idx + 1] : null;
+}
+
+// ─── Achievement display types ───────────────────────────────────────────────
+
+export interface AchievementDisplay {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  xp_reward: number;
+  coins_reward: number;
+  rarity: string;
+  criteria_type: string;
+  criteria_value: number;
+}
+
+export interface UserAchievementDisplay {
+  id: string;
+  achievement_id: string;
+  unlocked_at: string;
+  achievement: AchievementDisplay;
+}
+
+export const RARITY_COLORS: Record<string, string> = {
+  common: 'border-slate-400/20 bg-slate-400/5 text-slate-300 shadow-slate-400/10',
+  rare: 'border-blue-400/20 bg-blue-400/5 text-blue-300 shadow-blue-400/10',
+  epic: 'border-purple-400/20 bg-purple-400/5 text-purple-300 shadow-purple-400/10',
+  legendary: 'border-yellow-400/20 bg-yellow-400/5 text-yellow-300 shadow-yellow-400/10',
+};
+
+export const RARITY_GLOWS: Record<string, string> = {
+  common: '0 0 10px rgba(148,163,184,0.2)',
+  rare: '0 0 15px rgba(96,165,250,0.3)',
+  epic: '0 0 20px rgba(168,85,247,0.4)',
+  legendary: '0 0 30px rgba(250,204,21,0.5)',
+};
+
+// ─── Preset avatars ──────────────────────────────────────────────────────────
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  description: string;
+  url: string;
+  stars: number;
+  language: string;
+  updated_at: string;
+}
+
+export const PRESET_AVATARS = [
+  { id: 'preset-1',  name: 'Phoenix',   url: '/avatars/preset-1.svg' },
+  { id: 'preset-2',  name: 'Dragon',    url: '/avatars/preset-2.svg' },
+  { id: 'preset-3',  name: 'Wolf',      url: '/avatars/preset-3.svg' },
+  { id: 'preset-4',  name: 'Knight',    url: '/avatars/preset-4.svg' },
+  { id: 'preset-5',  name: 'Mage',      url: '/avatars/preset-5.svg' },
+  { id: 'preset-6',  name: 'Cyber',     url: '/avatars/preset-6.svg' },
+  { id: 'preset-7',  name: 'Samurai',   url: '/avatars/preset-7.svg' },
+  { id: 'preset-8',  name: 'Ghost',     url: '/avatars/preset-8.svg' },
+  { id: 'preset-9',  name: 'Titan',     url: '/avatars/preset-9.svg' },
+  { id: 'preset-10', name: 'Void',      url: '/avatars/preset-10.svg' },
+];

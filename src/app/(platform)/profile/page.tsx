@@ -1,184 +1,301 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Avatar } from "@/components/ui/Avatar";
-import { AnimatedCounter } from "@/components/dashboard/AnimatedCounter";
-import { RankBadge } from "@/components/dashboard/RankBadge";
-import { Progress } from "@/components/ui/Progress";
-import { Zap, Trophy, Flame, Award, Lock, Sparkles } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { useGamificationEngine } from "@/lib/hooks/useGamificationEngine";
+import { ProfileHero } from "@/components/profile/ProfileHero";
+import { AnimatedStatsGrid } from "@/components/profile/AnimatedStatsGrid";
+import { XPProgressCard } from "@/components/profile/XPProgressCard";
+import { AchievementsGrid } from "@/components/profile/AchievementsGrid";
+import { SkillPreview } from "@/components/profile/SkillPreview";
+import { ProfileShop } from "@/components/profile/ProfileShop";
+import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
+import { PortfolioSection } from "@/components/profile/PortfolioSection";
+import type { GamificationProfile, AchievementDisplay, UserAchievementDisplay, PortfolioProject, Certificate, ShopItem, SkillNode, UserSkillProgress, GitHubRepo } from "@/lib/types";
 
-interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  xp_reward: number;
-  coins_reward: number;
-  rarity: string;
-}
-interface UnlockedAchievement {
-  id: string;
-  achievement_id: string;
-  unlocked_at: string;
-  achievement: Achievement;
+interface FullProfileData {
+  profile: GamificationProfile | null;
+  achievements: { catalog: AchievementDisplay[]; unlocked: UserAchievementDisplay[] };
+  projects: PortfolioProject[];
+  certificates: Certificate[];
+  enrollments: { id: string; course: Record<string, unknown>; progress: number; completed: boolean; enrolled_at: string }[];
+  inventory: { id: string; item_id: string; is_equipped: boolean; item: ShopItem }[];
+  shopItems: ShopItem[];
+  githubRepos: GitHubRepo[];
 }
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
-const item = { hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0 } };
-const rarityColors: Record<string, string> = {
-  common: 'border-slate-400/20 bg-slate-400/5 text-slate-300',
-  rare: 'border-blue-400/20 bg-blue-400/5 text-blue-300',
-  epic: 'border-purple-400/20 bg-purple-400/5 text-purple-300',
-  legendary: 'border-yellow-400/20 bg-yellow-400/5 text-yellow-300',
+const container = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+};
+
+const sectionVariants = {
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
 export default function ProfilePage() {
-  const { profile, user } = useAuth();
-  const {
-    profile: gProfile, rankTier, nextLevelXp,
-  } = useGamificationEngine();
-  const [unlocked, setUnlocked] = useState<UnlockedAchievement[]>([]);
-  const [catalog, setCatalog] = useState<Achievement[]>([]);
+  const { profile: authProfile, user } = useAuth();
+  const [data, setData] = useState<FullProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { getFullProfileData } = await import('@/actions/profile');
+      const result = await getFullProfileData();
+      if (result) {
+        setData(result as unknown as FullProfileData);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load profile';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const { getAchievements } = await import('@/actions/gamification');
-        const result = await getAchievements();
-        setUnlocked(result.unlocked as unknown as UnlockedAchievement[]);
-        setCatalog(result.catalog as unknown as Achievement[]);
-      } catch { /* silent */ }
-    };
-    load();
+    fetchData();
+  }, [fetchData, refreshKey]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshKey(k => k + 1);
   }, []);
 
-  const displayName = profile?.full_name || user?.email?.split('@')[0] || "Student";
-  const username = profile?.username || user?.email?.split('@')[0] || "student";
-  const xp = gProfile?.xp ?? 0;
-  const level = gProfile?.level ?? 1;
-  const streak = gProfile?.current_streak ?? 0;
-  const txCoins = gProfile?.tx_coins ?? 0;
-  const totalXpEarned = gProfile?.total_xp_earned ?? 0;
-  const rank = gProfile?.rank ?? 0;
-  const xpForNext = nextLevelXp;
+  const handleSelectAvatar = async (avatarId: string) => {
+    const { selectAvatar } = await import('@/actions/profile');
+    await selectAvatar(avatarId);
+    handleRefresh();
+  };
 
-  const unlockedIds = new Set(unlocked.map(u => u.achievement_id));
-  const lockedCount = catalog.filter(a => !unlockedIds.has(a.id)).length;
+  const handleUploadAvatar = async (formData: FormData) => {
+    const { uploadAvatar } = await import('@/actions/profile');
+    return await uploadAvatar(formData);
+  };
+
+  const handleUpdateProfile = async (updateData: Record<string, unknown>) => {
+    const { updateProfile } = await import('@/actions/profile');
+    await updateProfile(updateData);
+  };
+
+  const handlePurchase = async (itemId: string) => {
+    const { purchaseItem } = await import('@/actions/profile');
+    await purchaseItem(itemId);
+  };
+
+  const handleEquip = async (itemId: string) => {
+    const { equipItem } = await import('@/actions/profile');
+    await equipItem(itemId);
+  };
+
+  const handleCreateProject = async (projectData: { title: string; description?: string; project_url?: string; github_url?: string; tags?: string[] }) => {
+    const { createProject } = await import('@/actions/profile');
+    await createProject(projectData);
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    const { deleteProject } = await import('@/actions/profile');
+    await deleteProject(id);
+    handleRefresh();
+  };
+
+  if (loading && !data) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="relative w-16 h-16 mx-auto">
+            <div className="absolute inset-0 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            <Sparkles className="w-6 h-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+          </div>
+          <p className="text-muted-light text-sm">Loading player profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-accent-red mx-auto" />
+          <p className="text-muted-light text-sm">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 rounded-xl bg-primary/20 text-primary-light text-sm hover:bg-primary/30 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const profile = data?.profile || null;
+  const displayName = profile?.display_name || authProfile?.full_name || user?.email?.split('@')[0] || "Player";
+  const username = profile?.username || user?.email?.split('@')[0] || "player";
+
+  const stats = {
+    tournamentsWon: profile?.tournaments_won ?? 0,
+    pvpWon: profile?.pvp_won ?? 0,
+    completedCourses: data?.enrollments?.filter(e => e.completed).length ?? 0,
+    practiceHours: profile?.practice_hours ?? 0,
+    quizAccuracy: profile?.quiz_accuracy ?? 0,
+    currentStreak: profile?.current_streak ?? 0,
+    longestStreak: profile?.longest_streak ?? 0,
+    totalXp: profile?.total_xp_earned ?? 0,
+    txCoins: profile?.tx_coins ?? 0,
+    rank: profile?.rank ?? 0,
+  };
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-      {/* Profile header */}
-      <motion.div variants={item}>
-        <Card hover={false} className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10" />
-          <div className="relative flex flex-col md:flex-row items-center gap-6 p-2">
-            <div className="relative">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="" className="w-24 h-24 rounded-full object-cover border-4 border-surface" />
-              ) : (
-                <Avatar name={displayName} size="xl" />
-              )}
-              <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs font-bold text-white border-2 border-surface">
-                {level}
-              </div>
-            </div>
-            <div className="text-center md:text-left flex-1">
-              <h1 className="text-2xl font-bold">{displayName}</h1>
-              <p className="text-muted-light">@{username}</p>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-3">
-                <Badge variant="primary" size="md"><Trophy className="w-3 h-3" /> {rankTier}</Badge>
-                {streak >= 7 && <Badge variant="warning" size="md"><Flame className="w-3 h-3" /> {streak}-day streak</Badge>}
-                <Badge variant="info" size="md"><Zap className="w-3 h-3" /> {totalXpEarned.toLocaleString()} total XP</Badge>
-              </div>
-            </div>
-            <RankBadge tier={rankTier} level={level} size="lg" />
-          </div>
-        </Card>
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="p-4 md:p-6 max-w-6xl mx-auto space-y-6 pb-24"
+    >
+      {/* Hero Section */}
+      <motion.div variants={sectionVariants}>
+        <ProfileHero profile={profile} displayName={displayName} username={username} />
       </motion.div>
 
-      {/* Stats grid */}
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { icon: <Zap className="w-5 h-5 text-primary" />, label: "Current XP", value: xp.toLocaleString(), sub: `Lvl ${level}` },
-          { icon: <Trophy className="w-5 h-5 text-accent-orange" />, label: "Global Rank", value: rank > 0 ? `#${rank}` : "--", sub: rankTier },
-          { icon: <Flame className="w-5 h-5 text-accent-orange" />, label: "Streak", value: `${streak} days`, sub: streak >= 7 ? "On fire!" : "Keep going" },
-          { icon: <Sparkles className="w-5 h-5 text-yellow-400" />, label: "TX Coins", value: txCoins.toLocaleString(), sub: "Platform currency" },
-        ].map((stat) => (
-          <Card key={stat.label} className="text-center space-y-2">
-            <div className="w-10 h-10 mx-auto rounded-xl bg-white/5 flex items-center justify-center">{stat.icon}</div>
-            <div className="text-xl font-bold">{stat.value}</div>
-            <div className="text-xs text-muted">{stat.label}</div>
-            <div className="text-[10px] text-muted-light">{stat.sub}</div>
-          </Card>
-        ))}
+      {/* XP Progress */}
+      <motion.div variants={sectionVariants}>
+        <XPProgressCard
+          xp={profile?.xp ?? 0}
+          level={profile?.level ?? 1}
+          xpForNext={profile?.xpForNext ?? 100}
+          totalXpEarned={profile?.total_xp_earned ?? 0}
+          percentile={profile?.percentile ?? 0}
+        />
       </motion.div>
 
-      {/* XP progress */}
-      <motion.div variants={item}>
-        <Card>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold">Level {level} → {level + 1}</span>
-            <span className="text-xs text-muted">{xp.toLocaleString()} / {xpForNext.toLocaleString()} XP</span>
-          </div>
-          <Progress value={xp} max={xpForNext} size="lg" color="primary" showLabel />
-          <p className="text-xs text-muted mt-2">
-            {Math.max(0, xpForNext - xp).toLocaleString()} XP needed to reach Level {level + 1}
-          </p>
-        </Card>
+      {/* Stats Grid */}
+      <motion.div variants={sectionVariants}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-accent-orange" />
+            Player Stats
+          </h2>
+          <motion.button
+            onClick={handleRefresh}
+            className="flex items-center gap-1 text-xs text-muted-light hover:text-white transition-colors"
+            whileHover={{ rotate: 180 }}
+            transition={{ duration: 0.3 }}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </motion.button>
+        </div>
+        <AnimatedStatsGrid stats={stats} />
       </motion.div>
 
-      {/* Achievements */}
-      <motion.div variants={item}>
-        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-          <Award className="w-5 h-5 text-accent-orange" /> Achievements
-          <span className="text-xs font-normal text-muted bg-white/5 px-2 py-0.5 rounded-full">
-            {unlocked.length}/{catalog.length} unlocked
-          </span>
-        </h2>
-        {catalog.length === 0 ? (
-          <Card hover={false} className="text-center py-12">
-            <Award className="w-10 h-10 text-muted/30 mx-auto mb-3" />
-            <p className="text-muted-light">No achievements available yet.</p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {catalog.map((achievement) => {
-              const isUnlocked = unlockedIds.has(achievement.id);
-              const ua = unlocked.find(u => u.achievement_id === achievement.id);
-
-              return (
-                <motion.div
-                  key={achievement.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className={`rounded-xl border p-4 text-center transition-all duration-300 ${
-                    isUnlocked
-                      ? rarityColors[achievement.rarity] || 'border-primary/20 bg-primary/5'
-                      : 'border-white/5 bg-white/[0.02] opacity-50'
-                  }`}
-                >
-                  <div className="text-2xl mb-2">{isUnlocked ? achievement.icon : <Lock className="w-6 h-6 mx-auto text-muted" />}</div>
-                  <div className="text-xs font-semibold leading-tight mb-1">{achievement.title}</div>
-                  <div className="text-[9px] text-muted leading-tight mb-2 line-clamp-2">{achievement.description}</div>
-                  <div className="flex items-center justify-center gap-1 text-[9px]">
-                    <Zap className="w-2.5 h-2.5 text-primary-light" />
-                    <span className="font-medium text-primary-light">+{achievement.xp_reward} XP</span>
-                  </div>
-                  {isUnlocked && ua && (
-                    <div className="text-[8px] text-accent-green mt-2">
-                      Unlocked {new Date(ua.unlocked_at).toLocaleDateString()}
+      {/* Learning Identity - Active Courses */}
+      {data?.enrollments && data.enrollments.length > 0 && (
+        <motion.div variants={sectionVariants}>
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+              <Sparkles className="w-5 h-5 text-secondary" />
+              Active Learning
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {data.enrollments.slice(0, 4).map((enrollment) => {
+                const course = enrollment.course as { title?: string; thumbnail?: string; gradient?: string } | undefined;
+                return (
+                  <motion.div
+                    key={enrollment.id}
+                    whileHover={{ y: -2 }}
+                    className="rounded-xl border border-border/50 bg-white/5 p-4 hover:border-border-light transition-all"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div
+                        className="w-10 h-10 rounded-lg flex items-center justify-center text-lg"
+                        style={{
+                          background: course?.gradient ? `linear-gradient(135deg, var(--color-primary), var(--color-secondary))` : undefined,
+                        }}
+                      >
+                        {course?.title?.charAt(0) || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">{course?.title || 'Unknown Course'}</div>
+                        <div className="text-[10px] text-muted">
+                          {enrollment.completed ? 'Completed' : `${enrollment.progress}% complete`}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </motion.div>
-              );
-            })}
+                    <div className="relative h-2 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${enrollment.progress}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
-        )}
+        </motion.div>
+      )}
+
+      {/* Skill Preview & Achievements Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div variants={sectionVariants}>
+          <SkillPreview
+            availablePoints={0}
+          />
+        </motion.div>
+        <motion.div variants={sectionVariants}>
+          <AchievementsGrid
+            catalog={data?.achievements?.catalog || []}
+            unlocked={data?.achievements?.unlocked || []}
+          />
+        </motion.div>
+      </div>
+
+      {/* Identity & Customization */}
+      <motion.div variants={sectionVariants}>
+        <ProfileIdentity
+          profile={profile}
+          onSelectAvatar={handleSelectAvatar}
+          onUploadAvatar={handleUploadAvatar}
+          onUploadBanner={async () => ({ url: '' })}
+          onUpdateProfile={handleUpdateProfile}
+          onRefresh={handleRefresh}
+        />
       </motion.div>
+
+      {/* Portfolio */}
+      <motion.div variants={sectionVariants}>
+        <PortfolioSection
+          projects={data?.projects || []}
+          certificates={data?.certificates || []}
+          githubRepos={data?.githubRepos || []}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteProject}
+          onUploadCertificate={async () => {}}
+          onRefresh={handleRefresh}
+        />
+      </motion.div>
+
+      {/* Shop */}
+      {data?.shopItems && data.shopItems.length > 0 && (
+        <motion.div variants={sectionVariants}>
+          <ProfileShop
+            profile={profile}
+            items={data.shopItems}
+            inventory={data.inventory}
+            onPurchase={handlePurchase}
+            onEquip={handleEquip}
+            onRefresh={handleRefresh}
+          />
+        </motion.div>
+      )}
     </motion.div>
   );
 }
