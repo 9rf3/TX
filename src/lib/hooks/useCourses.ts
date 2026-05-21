@@ -7,27 +7,30 @@ export type CourseData = DbCourseWithInstructor;
 export function useCourses() {
   const [courses, setCourses] = useState<CourseData[]>([]);
   const [course, setCourse] = useState<CourseData | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sbRef = useRef(createClient());
 
-  const fetchCourses = useCallback(async (includeUnpublished = false) => {
+  const fetchCourses = useCallback(async (includeUnpublished = false, limit = 100) => {
     setIsLoading(true);
     setError(null);
     try {
       let query = sbRef.current
         .from("courses")
-        .select("*, instructor:profiles(*)")
-        .order("created_at", { ascending: false });
+        .select("*, instructor:profiles(*)", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (!includeUnpublished) {
         query = query.eq("published", true);
       }
 
-      const { data, error: err } = await query;
+      const { data, error: err, count } = await query;
 
       if (err) throw err;
       setCourses(data as unknown as CourseData[]);
+      if (count !== null) setTotalCount(count);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to fetch courses";
       console.error("Error fetching courses:", message);
@@ -127,7 +130,7 @@ export function useCourses() {
   };
 
   return {
-    courses, course, fetchCourses, fetchCourse,
+    courses, course, totalCount, fetchCourses, fetchCourse,
     createCourse, updateCourse, deleteCourse,
     isLoading, error
   };

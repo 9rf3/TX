@@ -19,25 +19,22 @@ import { createClient } from "@/utils/supabase/server";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  
-  const { data: { user } } = await supabase.auth.getUser();
-  let profile = null;
-  
-  if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-    profile = data;
+  let initialUser = null;
+
+  try {
+    const cookieStore = await cookies();
+    const supabase = createClient(cookieStore);
+    const { data: { user } } = await supabase.auth.getUser();
+    initialUser = user;
+  } catch {
+    // Session fetch failed; proceed without initial user.
+    // AuthProvider will recover client-side via onAuthStateChange.
   }
 
   return (
     <html lang="en" className={`${inter.variable} dark`}>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased">
-        <AuthProvider initialUser={user} initialProfile={profile}>
+        <AuthProvider initialUser={initialUser} initialProfile={null}>
           {children}
         </AuthProvider>
       </body>

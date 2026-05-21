@@ -21,16 +21,16 @@ export default function AdminPage() {
   const { isAuthorized, isLoading: isRoleLoading } = useRequireRole([ROLES.ADMIN]);
   const [tab, setTab] = useState("overview");
 
-  const { users, fetchUsers, isLoading: isUsersLoading } = useUsers();
-  const { courses, fetchCourses, isLoading: isCoursesLoading } = useCourses();
+  const { users, totalCount: totalUserCount, fetchUsers, isLoading: isUsersLoading } = useUsers();
+  const { courses, totalCount: totalCourseCount, fetchCourses, isLoading: isCoursesLoading } = useCourses();
 
   useEffect(() => {
     if (isAuthorized) {
-      if (tab === "users" && users.length === 0) fetchUsers();
-      if (tab === "courses" && courses.length === 0) fetchCourses(true);
+      if (tab === "users" && users.length === 0) fetchUsers(200);
+      if (tab === "courses" && courses.length === 0) fetchCourses(true, 100);
       if (tab === "overview") {
-        if (users.length === 0) fetchUsers();
-        if (courses.length === 0) fetchCourses(true);
+        if (users.length === 0) fetchUsers(200);
+        if (courses.length === 0) fetchCourses(true, 100);
       }
     }
   }, [isAuthorized, tab, fetchUsers, fetchCourses]);
@@ -71,9 +71,9 @@ export default function AdminPage() {
           <>
             <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { icon: <Users className="w-6 h-6 text-primary" />, label: "Total Users", value: isUsersLoading ? "..." : formatNumber(users.length), color: "text-primary" },
+                { icon: <Users className="w-6 h-6 text-primary" />, label: "Total Users", value: isUsersLoading ? "..." : formatNumber(totalUserCount || users.length), color: "text-primary" },
                 { icon: <Activity className="w-6 h-6 text-accent-green" />, label: "Active Users", value: isUsersLoading ? "..." : formatNumber(users.filter(u => u.isOnline).length), color: "text-accent-green" },
-                { icon: <BookOpen className="w-6 h-6 text-secondary" />, label: "Total Courses", value: isCoursesLoading ? "..." : formatNumber(courses.length), color: "text-secondary" },
+                { icon: <BookOpen className="w-6 h-6 text-secondary" />, label: "Total Courses", value: isCoursesLoading ? "..." : formatNumber(totalCourseCount || courses.length), color: "text-secondary" },
                 { icon: <DollarSign className="w-6 h-6 text-accent-orange" />, label: "Revenue", value: "$0", color: "text-accent-orange" },
               ].map((stat) => (
                 <GamePanel key={stat.label} className="p-4">
@@ -100,7 +100,7 @@ export default function AdminPage() {
                     </span>
                     <div>
                       <div className="font-bold text-white">Manage Courses</div>
-                      <div className="text-xs text-muted-light">{courses.length} courses</div>
+                      <div className="text-xs text-muted-light">{totalCourseCount || courses.length} courses</div>
                     </div>
                   </div>
                   <ArrowRight className="w-5 h-5 text-muted-light" />
