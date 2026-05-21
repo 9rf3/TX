@@ -1,16 +1,16 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Loader2, AlertCircle, RefreshCw, Sparkles } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, Sparkles, GraduationCap, Flame, BookOpen } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { ProfileHero } from "@/components/profile/ProfileHero";
-import { AnimatedStatsGrid } from "@/components/profile/AnimatedStatsGrid";
-import { XPProgressCard } from "@/components/profile/XPProgressCard";
-import { AchievementsGrid } from "@/components/profile/AchievementsGrid";
-import { SkillPreview } from "@/components/profile/SkillPreview";
-import { ProfileShop } from "@/components/profile/ProfileShop";
+import { GamePanel, PanelHeader, ProgressBar } from "@/components/ui/GamePanel";
+import { PremiumProfileHero } from "@/components/profile/PremiumProfileHero";
+import { PremiumStatsGrid } from "@/components/profile/PremiumStatsGrid";
+import { PremiumAchievementsGrid } from "@/components/profile/PremiumAchievementsGrid";
+import { PremiumSkillPreview } from "@/components/profile/PremiumSkillPreview";
+import { PremiumProfileShop } from "@/components/profile/PremiumProfileShop";
+import { PremiumPortfolioSection } from "@/components/profile/PremiumPortfolioSection";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
-import { PortfolioSection } from "@/components/profile/PortfolioSection";
 import type { GamificationProfile, AchievementDisplay, UserAchievementDisplay, PortfolioProject, Certificate, ShopItem, SkillNode, UserSkillProgress, GitHubRepo } from "@/lib/types";
 
 interface FullProfileData {
@@ -23,16 +23,6 @@ interface FullProfileData {
   shopItems: ShopItem[];
   githubRepos: GitHubRepo[];
 }
-
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
-};
-
-const sectionVariants = {
-  hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
-};
 
 export default function ProfilePage() {
   const { profile: authProfile, user } = useAuth();
@@ -150,116 +140,66 @@ export default function ProfilePage() {
     totalXp: profile?.total_xp_earned ?? 0,
     txCoins: profile?.tx_coins ?? 0,
     rank: profile?.rank ?? 0,
+    achievementsUnlocked: data?.achievements?.unlocked?.length ?? 0,
   };
 
+  const activeEnrollments = data?.enrollments?.filter(e => !e.completed) ?? [];
+
   return (
-    <motion.div
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className="p-4 md:p-6 max-w-6xl mx-auto space-y-6 pb-24"
-    >
-      {/* Hero Section */}
-      <motion.div variants={sectionVariants}>
-        <ProfileHero profile={profile} displayName={displayName} username={username} />
-      </motion.div>
+    <div className="relative min-h-full overflow-hidden bg-[#070b16] px-3 py-4 text-foreground sm:px-4 md:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(139,92,246,0.15),transparent_40%),radial-gradient(circle_at_85%_16%,rgba(6,182,212,0.12),transparent_38%),linear-gradient(180deg,rgba(10,10,15,0)_0%,rgba(7,11,22,1)_100%)]" />
 
-      {/* XP Progress */}
-      <motion.div variants={sectionVariants}>
-        <XPProgressCard
-          xp={profile?.xp ?? 0}
-          level={profile?.level ?? 1}
-          xpForNext={profile?.xpForNext ?? 100}
-          totalXpEarned={profile?.total_xp_earned ?? 0}
-          percentile={profile?.percentile ?? 0}
-        />
-      </motion.div>
+      <div className="relative z-10 mx-auto max-w-6xl space-y-5">
+        <PremiumProfileHero profile={profile} displayName={displayName} username={username} />
 
-      {/* Stats Grid */}
-      <motion.div variants={sectionVariants}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-accent-orange" />
-            Player Stats
-          </h2>
-          <motion.button
-            onClick={handleRefresh}
-            className="flex items-center gap-1 text-xs text-muted-light hover:text-white transition-colors"
-            whileHover={{ rotate: 180 }}
-            transition={{ duration: 0.3 }}
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </motion.button>
-        </div>
-        <AnimatedStatsGrid stats={stats} />
-      </motion.div>
+        <PremiumStatsGrid {...stats} />
 
-      {/* Learning Identity - Active Courses */}
-      {data?.enrollments && data.enrollments.length > 0 && (
-        <motion.div variants={sectionVariants}>
-          <div className="rounded-2xl border border-border bg-surface p-5">
-            <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
-              <Sparkles className="w-5 h-5 text-secondary" />
-              Active Learning
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {data.enrollments.slice(0, 4).map((enrollment) => {
+        {activeEnrollments.length > 0 && (
+          <GamePanel>
+            <PanelHeader
+              icon={<BookOpen className="h-4 w-4" />}
+              title="Active Courses"
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {activeEnrollments.slice(0, 4).map((enrollment) => {
                 const course = enrollment.course as { title?: string; thumbnail?: string; gradient?: string } | undefined;
                 return (
-                  <motion.div
-                    key={enrollment.id}
-                    whileHover={{ y: -2 }}
-                    className="rounded-xl border border-border/50 bg-white/5 p-4 hover:border-border-light transition-all"
-                  >
+                  <div key={enrollment.id} className="rounded-[8px] border border-white/10 bg-black/18 p-4 transition hover:border-primary/30">
                     <div className="flex items-center gap-3 mb-3">
                       <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-lg"
-                        style={{
-                          background: course?.gradient ? `linear-gradient(135deg, var(--color-primary), var(--color-secondary))` : undefined,
-                        }}
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] text-lg"
+                        style={{ background: course?.gradient || "linear-gradient(135deg, #8b5cf6, #06b6d4)" }}
                       >
-                        {course?.title?.charAt(0) || '?'}
+                        {course?.title?.charAt(0) || "?"}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold truncate">{course?.title || 'Unknown Course'}</div>
-                        <div className="text-[10px] text-muted">
-                          {enrollment.completed ? 'Completed' : `${enrollment.progress}% complete`}
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold text-white">{course?.title || "Unknown Course"}</div>
+                        <div className="text-[10px] text-muted-light">In progress</div>
                       </div>
                     </div>
-                    <div className="relative h-2 rounded-full bg-white/5 overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${enrollment.progress}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                      />
-                    </div>
-                  </motion.div>
+                    <ProgressBar value={enrollment.progress} max={100} tone="from-primary to-secondary" />
+                    <div className="mt-1 text-right text-[10px] text-muted-light">{enrollment.progress}%</div>
+                  </div>
                 );
               })}
             </div>
-          </div>
-        </motion.div>
-      )}
+          </GamePanel>
+        )}
 
-      {/* Skill Preview & Achievements Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={sectionVariants}>
-          <SkillPreview
-            availablePoints={0}
-          />
-        </motion.div>
-        <motion.div variants={sectionVariants}>
-          <AchievementsGrid
+        <div className="grid gap-5 lg:grid-cols-2">
+          <PremiumSkillPreview />
+          <PremiumAchievementsGrid
             catalog={data?.achievements?.catalog || []}
             unlocked={data?.achievements?.unlocked || []}
           />
-        </motion.div>
-      </div>
+        </div>
 
-      {/* Identity & Customization */}
-      <motion.div variants={sectionVariants}>
+        <PremiumPortfolioSection
+          projects={data?.projects || []}
+          certificates={data?.certificates || []}
+          githubRepos={data?.githubRepos || []}
+        />
+
         <ProfileIdentity
           profile={profile}
           onSelectAvatar={handleSelectAvatar}
@@ -268,25 +208,9 @@ export default function ProfilePage() {
           onUpdateProfile={handleUpdateProfile}
           onRefresh={handleRefresh}
         />
-      </motion.div>
 
-      {/* Portfolio */}
-      <motion.div variants={sectionVariants}>
-        <PortfolioSection
-          projects={data?.projects || []}
-          certificates={data?.certificates || []}
-          githubRepos={data?.githubRepos || []}
-          onCreateProject={handleCreateProject}
-          onDeleteProject={handleDeleteProject}
-          onUploadCertificate={async () => {}}
-          onRefresh={handleRefresh}
-        />
-      </motion.div>
-
-      {/* Shop */}
-      {data?.shopItems && data.shopItems.length > 0 && (
-        <motion.div variants={sectionVariants}>
-          <ProfileShop
+        {data?.shopItems && data.shopItems.length > 0 && (
+          <PremiumProfileShop
             profile={profile}
             items={data.shopItems}
             inventory={data.inventory}
@@ -294,8 +218,8 @@ export default function ProfilePage() {
             onEquip={handleEquip}
             onRefresh={handleRefresh}
           />
-        </motion.div>
-      )}
-    </motion.div>
+        )}
+      </div>
+    </div>
   );
 }
