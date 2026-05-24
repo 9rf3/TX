@@ -17,6 +17,7 @@ const navItems = [
   { href: "/skills", label: "Skill Tree", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/tournaments", label: "Tournaments", icon: GraduationCap },
+  { href: "/pvp", label: "PvP Arena", icon: Swords },
   { href: "/ai-chat", label: "AI Assistant", icon: Sparkles },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/profile", label: "Profile", icon: User },

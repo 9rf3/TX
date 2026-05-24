@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Swords, Clock, Check, X, Loader2, Zap, Coins,
-  Trophy, Users, ArrowLeft, AlertTriangle,
+  Trophy, ArrowLeft, AlertTriangle, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
-import { quickMatch, submitPvPAnswer, completePvPMatch, getPvPMatchState } from "@/actions/pvp";
-import type { PvPCategory } from "@/lib/types";
+import { getMatchState, submitPvPAnswer, completePvPMatch, getPvPQuestions } from "@/actions/pvp";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 interface PvPQuestion {
   id: string;
@@ -30,28 +31,15 @@ interface AnswerRec {
   points: number;
 }
 
-interface MatchResultData {
-  status: string;
-  winner: string | null;
-  isWinner: boolean;
-  p1Score: number;
-  p2Score: number;
-  xpReward: number;
-  coinReward: number;
-}
+type PageStatus = "loading" | "not_found" | "waiting" | "playing" | "finished" | "cancelled";
 
-type Phase = "queue" | "matched" | "playing" | "finished" | "waiting_opponent" | "cancelled";
+export default function PvPMatchPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { user } = useAuth();
+  const matchId = params.id as string;
 
-export function PvPMatchModal({
-  category,
-  onClose,
-  currentUserId,
-}: {
-  category: PvPCategory;
-  onClose: () => void;
-  currentUserId: string;
-}) {
-  const [phase, setPhase] = useState<Phase>("queue");
+  const [status, setStatus] = useState<PageStatus>("loading");
   const [questions, setQuestions] = useState<PvPQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState("");
@@ -60,17 +48,19 @@ export function PvPMatchModal({
   const [answers, setAnswers] = useState<Record<string, AnswerRec>>({});
   const [score, setScore] = useState(0);
   const [opponentScore, setOpponentScore] = useState(0);
-  const [matchId, setMatchId] = useState<string | null>(null);
-  const [resultData, setResultData] = useState<MatchResultData | null>(null);
   const [isPlayer1, setIsPlayer1] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [matchTimer, setMatchTimer] = useState(180);
+  const [matchCategory, setMatchCategory] = useState("");
+
+  // Result state
+  const [resultData, setResultData] = useState<{
+    status: string; winner: string | null; isWinner: boolean;
+    p1Score: number; p2Score: number; xpReward: number; coinReward: number;
+  } | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scorePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const matchedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -79,98 +69,136 @@ export function PvPMatchModal({
   const answeredCurrent = currentQuestion ? answers[currentQuestion.id] !== undefined : false;
   const correctCount = Object.values(answers).filter((a) => a.correct).length;
 
-  // Initialize match
+  // Load match state
   useEffect(() => {
     mountedRef.current = true;
-    const init = async () => {
-      try {
-        const data = await quickMatch(category);
-        if (!mountedRef.current) return;
-        const qs = data.questions as PvPQuestion[];
-        setMatchId(data.match.id);
-        setIsPlayer1(data.match.player_1_id === currentUserId);
+    if (!matchId || !user) return;
 
-        if (data.match.status === "active") {
-          setPhase("matched");
-          setQuestions(qs);
-          matchedTimeoutRef.current = setTimeout(() => {
-            if (mountedRef.current) setPhase("playing");
-          }, 1500);
-        } else {
-          setPhase("waiting_opponent");
-          pollRef.current = setInterval(async () => {
-            try {
-              const state = await getPvPMatchState(data.match.id);
+    const load = async () => {
+      try {
+        const state = await getMatchState(matchId);
+        if (!mountedRef.current) return;
+
+        if (state.status === "cancelled") {
+          setStatus("cancelled");
+          setErrorMsg("Match was cancelled");
+          return;
+        }
+
+        if (state.status === "completed") {
+          const qs = await getPvPQuestions(matchId).catch(() => []) as PvPQuestion[];
+          if (mountedRef.current) {
+            setMatchCategory(state.category);
+            setQuestions(qs);
+            setScore(state.p1Score);
+            setOpponentScore(state.p2Score);
+            setIsPlayer1(state.player1Id === user.id);
+            setResultData({
+              status: "completed", winner: state.winnerId,
+              isWinner: state.winnerId === user.id,
+              p1Score: state.p1Score, p2Score: state.p2Score,
+              xpReward: state.winnerId === user.id ? 50 : 15,
+              coinReward: state.winnerId === user.id ? 25 : 5,
+            });
+            setStatus("finished");
+          }
+          return;
+        }
+
+        if (state.status === "waiting" && !state.player2Id) {
+          if (mountedRef.current) {
+            setMatchCategory(state.category);
+            setIsPlayer1(state.player1Id === user.id);
+            setStatus("waiting");
+            // Poll for opponent
+            const poll = setInterval(async () => {
               if (!mountedRef.current) return;
-              if (state.status === "active" && state.player2Id) {
-                if (pollRef.current) clearInterval(pollRef.current);
-                setPhase("matched");
-                setOpponentScore(0);
-                setQuestions(qs);
-                matchedTimeoutRef.current = setTimeout(() => {
-                  if (mountedRef.current) setPhase("playing");
-                }, 1500);
+              try {
+                const s = await getMatchState(matchId);
+                if (!mountedRef.current) return;
+                if (s.status === "active" && s.player2Id) {
+                  clearInterval(poll);
+                  const qs = await getPvPQuestions(matchId) as PvPQuestion[];
+                  if (mountedRef.current) {
+                    setQuestions(qs);
+                    setOpponentScore(0);
+                    setStatus("playing");
+                  }
+                }
+              } catch { /* retry */ }
+            }, 1500);
+            // Timeout after 30s
+            setTimeout(() => {
+              clearInterval(poll);
+              if (mountedRef.current && status === "waiting") {
+                setStatus("cancelled");
+                setErrorMsg("No opponent found");
               }
-            } catch { /* polling timeout */ }
-          }, 2000);
+            }, 30000);
+          }
+          return;
+        }
+
+        // Active match
+        setIsPlayer1(state.player1Id === user.id);
+        setScore(state.p1Score);
+        setOpponentScore(state.p2Score);
+        setMatchCategory(state.category);
+
+        const qs = await getPvPQuestions(matchId) as PvPQuestion[];
+        if (mountedRef.current) {
+          setQuestions(qs);
+          setStatus("playing");
         }
       } catch (e) {
         if (!mountedRef.current) return;
-        setError(e instanceof Error ? e.message : "Failed to create match");
-        setPhase("cancelled");
+        setStatus("not_found");
+        setErrorMsg(e instanceof Error ? e.message : "Match not found");
       }
     };
-    init();
+    load();
+
     return () => {
       mountedRef.current = false;
-      if (pollRef.current) clearInterval(pollRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       if (scorePollRef.current) clearInterval(scorePollRef.current);
-      if (matchedTimeoutRef.current) clearTimeout(matchedTimeoutRef.current);
-      if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current);
     };
-  }, [category, currentUserId]);
+  }, [matchId, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Match timer + score polling
+  // Start timer + score polling when playing
   useEffect(() => {
-    if (phase !== "playing" || finishRef.current) return;
+    if (status !== "playing" || finishRef.current) return;
 
     timerRef.current = setInterval(() => {
-      setMatchTimer((t) => {
-        if (t <= 1) return 0;
-        return t - 1;
-      });
+      setMatchTimer((t) => (t <= 1 ? 0 : t - 1));
     }, 1000);
 
     scorePollRef.current = setInterval(async () => {
       if (!matchId || !mountedRef.current) return;
       try {
-        const state = await getPvPMatchState(matchId);
+        const state = await getMatchState(matchId);
         if (mountedRef.current) {
           setOpponentScore(isPlayer1 ? state.p2Score : state.p1Score);
         }
-      } catch { /* polling timeout */ }
+      } catch { /* ignore */ }
     }, 3000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (scorePollRef.current) clearInterval(scorePollRef.current);
     };
-  }, [phase, matchId, isPlayer1]);
+  }, [status, matchId, isPlayer1]);
 
-  // Auto-finish on timer expiry
+  // Auto-finish on timer expiry or all questions done
   useEffect(() => {
-    if (phase === "playing" && matchTimer <= 0 && !finishRef.current) {
-      handleFinish();
+    if (status === "playing") {
+      if (matchTimer <= 0 && !finishRef.current) {
+        handleFinish();
+      } else if (totalQuestions > 0 && currentIndex >= totalQuestions && !finishRef.current) {
+        handleFinish();
+      }
     }
-  }, [matchTimer, phase]);
-
-  // Auto-finish when all questions done
-  useEffect(() => {
-    if (phase === "playing" && totalQuestions > 0 && currentIndex >= totalQuestions && !finishRef.current) {
-      handleFinish();
-    }
-  }, [currentIndex, totalQuestions, phase]);
+  }, [matchTimer, currentIndex, totalQuestions, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFinish = useCallback(async () => {
     if (finishRef.current || !matchId) return;
@@ -182,32 +210,22 @@ export function PvPMatchModal({
       const res = await completePvPMatch(matchId);
       if (!mountedRef.current) return;
       if (res.status === "cancelled") {
-        setPhase("cancelled");
-        setError("No opponent found");
+        setStatus("cancelled");
+        setErrorMsg("No opponent found");
       } else {
-        const data: MatchResultData = {
-          status: res.status,
-          winner: res.winner ?? null,
-          isWinner: res.isWinner ?? false,
-          p1Score: res.p1Score ?? 0,
-          p2Score: res.p2Score ?? 0,
-          xpReward: res.xpReward ?? 0,
-          coinReward: res.coinReward ?? 0,
-        };
-        setResultData(data);
-        setPhase("finished");
+        setResultData(res);
+        setStatus("finished");
       }
     } catch (e) {
       if (mountedRef.current) {
-        setError(e instanceof Error ? e.message : "Failed to complete match");
-        setPhase("cancelled");
+        setErrorMsg(e instanceof Error ? e.message : "Failed to complete match");
+        setStatus("cancelled");
       }
     }
   }, [matchId]);
 
   const handleSubmitAnswer = useCallback(async () => {
     if (!currentQuestion || !matchId || submitting || finishRef.current) return;
-
     const answer = currentQuestion.type === "written" ? writtenAnswer : selectedAnswer;
     if (!answer) return;
 
@@ -223,20 +241,17 @@ export function PvPMatchModal({
       setScore(res.totalScore);
       setSelectedAnswer("");
       setWrittenAnswer("");
-
-      advanceTimeoutRef.current = setTimeout(() => {
-        if (!mountedRef.current || finishRef.current) return;
-        setCurrentIndex((i) => {
-          if (i >= totalQuestions - 1) return i;
-          return i + 1;
-        });
-      }, 800);
     } catch (e) {
-      console.error("PvP submit failed:", e);
+      console.error("Submit failed:", e);
     } finally {
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [currentQuestion, matchId, submitting, selectedAnswer, writtenAnswer, totalQuestions]);
+  }, [currentQuestion, matchId, submitting, selectedAnswer, writtenAnswer]);
+
+  const handleNext = useCallback(() => {
+    if (finishRef.current) return;
+    setCurrentIndex((i) => (i >= totalQuestions - 1 ? i : i + 1));
+  }, [totalQuestions]);
 
   const handleSkip = useCallback(() => {
     if (!currentQuestion || finishRef.current) return;
@@ -244,100 +259,88 @@ export function PvPMatchModal({
       ...prev,
       [currentQuestion.id]: { answer: "", correct: false, points: 0 },
     }));
-    setCurrentIndex((i) => {
-      if (i >= totalQuestions - 1) return i;
-      return i + 1;
-    });
+    setCurrentIndex((i) => (i >= totalQuestions - 1 ? i : i + 1));
   }, [currentQuestion, totalQuestions]);
-
-  const handleNext = useCallback(() => {
-    if (finishRef.current) return;
-    setCurrentIndex((i) => {
-      if (i >= totalQuestions - 1) {
-        setTimeout(() => handleFinish(), 50);
-        return i;
-      }
-      return i + 1;
-    });
-  }, [totalQuestions, handleFinish]);
 
   const minutes = Math.floor(matchTimer / 60);
   const seconds = matchTimer % 60;
 
-  // Queue Phase
-  if (phase === "queue") {
+  // Loading state
+  if (status === "loading") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-          <Loader2 className="w-12 h-12 text-primary-light animate-spin mx-auto mb-4" />
-          <p className="text-white font-bold text-xl">Finding Match...</p>
-          <p className="text-muted-light text-sm mt-1">Searching for an opponent</p>
-        </motion.div>
+      <div className="flex items-center justify-center min-h-screen bg-[#070b16]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-primary-light animate-spin mx-auto mb-4" />
+          <p className="text-white font-bold text-lg">Loading match...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not found
+  if (status === "not_found") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#070b16] p-4">
+        <div className="bg-[#0e1220] border border-red-500/30 rounded-2xl p-8 max-w-md text-center">
+          <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-white mb-2">Match Not Found</h3>
+          <p className="text-muted-light text-sm mb-6">{errorMsg || "This match doesn't exist"}</p>
+          <Button variant="primary" onClick={() => router.push("/pvp")}>
+            <ArrowLeft className="w-4 h-4" /> Back to Arena
+          </Button>
+        </div>
       </div>
     );
   }
 
   // Waiting for opponent
-  if (phase === "waiting_opponent") {
+  if (status === "waiting") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          className="bg-[#0e1220] border border-white/10 rounded-2xl p-8 max-w-sm text-center">
+      <div className="flex items-center justify-center min-h-screen bg-[#070b16] p-4">
+        <div className="bg-[#0e1220] border border-white/10 rounded-2xl p-8 max-w-sm text-center">
           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-blue-600/30 flex items-center justify-center mx-auto mb-4 border-2 border-primary/30 animate-pulse">
-            <Users className="w-10 h-10 text-primary-light" />
+            <Swords className="w-10 h-10 text-primary-light" />
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Waiting for Opponent</h3>
-          <p className="text-muted-light text-sm mb-4 capitalize">{category} · Quick Match</p>
+          <p className="text-muted-light text-sm mb-4 capitalize">{matchCategory} · Match</p>
           <div className="flex items-center justify-center gap-2 mb-6">
             <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "0ms" }} />
             <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "150ms" }} />
             <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
-          <Button variant="ghost" className="w-full" onClick={onClose}>Cancel</Button>
-        </motion.div>
+          <Button variant="ghost" className="w-full" onClick={() => router.push("/pvp")}>
+            Cancel
+          </Button>
+        </div>
       </div>
     );
   }
 
-  // Matched animation
-  if (phase === "matched") {
+  // Cancelled
+  if (status === "cancelled") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 10 }}
-            className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center mx-auto mb-4 border-4 border-primary-light/30">
-            <Swords className="w-12 h-12 text-white" />
-          </motion.div>
-          <h2 className="text-2xl font-black text-white mb-1">Match Found!</h2>
-          <p className="text-muted-light text-sm">Get ready to battle</p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Error / Cancelled
-  if (phase === "cancelled") {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          className="bg-[#0e1220] border border-white/10 rounded-2xl p-8 max-w-md text-center">
+      <div className="flex items-center justify-center min-h-screen bg-[#070b16] p-4">
+        <div className="bg-[#0e1220] border border-white/10 rounded-2xl p-8 max-w-md text-center">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-white mb-2">Match Cancelled</h3>
-          <p className="text-muted-light mb-6">{error || "Could not complete the match"}</p>
-          <Button variant="primary" onClick={onClose}>Close</Button>
-        </motion.div>
+          <p className="text-muted-light mb-6">{errorMsg || "Could not complete the match"}</p>
+          <Button variant="primary" onClick={() => router.push("/pvp")}>
+            <ArrowLeft className="w-4 h-4" /> Back to Arena
+          </Button>
+        </div>
       </div>
     );
   }
 
   // Finished / Results
-  if (phase === "finished" && resultData) {
+  if (status === "finished" && resultData) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm overflow-y-auto">
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-lg mx-4">
+      <div className="min-h-screen bg-[#070b16] flex items-center justify-center p-4">
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-lg">
           <div className="bg-[#0e1220] border border-white/10 rounded-2xl overflow-hidden">
-            <div className={cn("h-2 w-full", resultData.isWinner ? "bg-gradient-to-r from-amber-400 to-accent-orange" : "bg-gradient-to-r from-muted to-white/10")} />
+            <div className={cn("h-2 w-full",
+              resultData.isWinner ? "bg-gradient-to-r from-amber-400 to-accent-orange" : "bg-gradient-to-r from-muted to-white/10"
+            )} />
             <div className="p-8 text-center">
               {resultData.isWinner ? (
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-400/30 to-accent-orange/30 flex items-center justify-center mx-auto mb-4 border-2 border-amber-400/30">
@@ -348,8 +351,10 @@ export function PvPMatchModal({
                   <Swords className="w-10 h-10 text-muted-light" />
                 </div>
               )}
-              <h2 className="text-2xl font-black text-white mb-1">{resultData.isWinner ? "Victory!" : "Defeat"}</h2>
-              <p className="text-muted-light text-sm mb-2 capitalize">{category} Duel</p>
+              <h2 className="text-2xl font-black text-white mb-1">
+                {resultData.isWinner ? "Victory!" : "Defeat"}
+              </h2>
+              <p className="text-muted-light text-sm mb-2 capitalize">{matchCategory} Duel</p>
               <div className="flex items-center justify-center gap-6 mb-6">
                 <div className="text-center">
                   <p className="text-3xl font-black text-white">{resultData.p1Score}</p>
@@ -373,21 +378,23 @@ export function PvPMatchModal({
                   <p className="text-[10px] text-muted-light uppercase tracking-wider">TX Coins</p>
                 </div>
               </div>
-              <div className="space-y-2 mb-6">
-                {Object.entries(answers).map(([qId, ans], i) => (
-                  <div key={qId} className={cn(
-                    "flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm",
-                    ans.correct ? "bg-accent-green/10 border-accent-green/20 text-accent-green" : "bg-red-500/10 border-red-500/20 text-red-400",
-                  )}>
-                    <span>Q{i + 1}</span>
-                    <span className="flex items-center gap-1">
-                      {ans.correct ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                      {ans.points} pts
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <Button variant="primary" className="w-full" glow onClick={onClose}>
+              {Object.keys(answers).length > 0 && (
+                <div className="space-y-2 mb-6">
+                  {Object.entries(answers).map(([qId, ans], i) => (
+                    <div key={qId} className={cn(
+                      "flex items-center justify-between px-4 py-2.5 rounded-lg border text-sm",
+                      ans.correct ? "bg-accent-green/10 border-accent-green/20 text-accent-green" : "bg-red-500/10 border-red-500/20 text-red-400",
+                    )}>
+                      <span>Q{i + 1}</span>
+                      <span className="flex items-center gap-1">
+                        {ans.correct ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        {ans.points} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="primary" className="w-full" glow onClick={() => router.push("/pvp")}>
                 <Swords className="w-4 h-4" /> Back to Arena
               </Button>
             </div>
@@ -400,7 +407,7 @@ export function PvPMatchModal({
   // Playing — no current question
   if (!currentQuestion) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
+      <div className="flex items-center justify-center min-h-screen bg-[#070b16]">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-primary-light animate-spin mx-auto mb-4" />
           <p className="text-white font-bold text-lg">Loading challenge...</p>
@@ -414,16 +421,17 @@ export function PvPMatchModal({
   const questionOptions = qData.options;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#070b16]">
+    <div className="min-h-screen bg-[#070b16] flex flex-col">
+      {/* Top Bar */}
       <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-white/10 bg-[#0e1220]">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 text-muted-light hover:text-white cursor-pointer">
+          <button onClick={() => router.push("/pvp")} className="p-2 rounded-lg hover:bg-white/5 text-muted-light hover:text-white cursor-pointer">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <div className="flex items-center gap-2">
               <Swords className="w-4 h-4 text-primary-light" />
-              <h2 className="text-sm font-bold text-white capitalize">{category} Duel</h2>
+              <h2 className="text-sm font-bold text-white capitalize">{matchCategory} Duel</h2>
             </div>
             <p className="text-[10px] text-muted-light">Question {currentIndex + 1} of {totalQuestions}</p>
           </div>
@@ -450,11 +458,13 @@ export function PvPMatchModal({
         </div>
       </div>
 
+      {/* Progress Bar */}
       <div className="h-1 bg-white/5">
         <div className="h-full bg-gradient-to-r from-violet-600 to-cyan-500 transition-all duration-500"
           style={{ width: `${progress + (answeredCurrent ? 100 / totalQuestions : 0)}%` }} />
       </div>
 
+      {/* Question Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto p-4 md:p-8">
           <div key={currentQuestion.id}>
@@ -535,7 +545,9 @@ export function PvPMatchModal({
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className={cn(
                   "mt-4 px-4 py-3 rounded-xl border flex items-center gap-2 text-sm font-medium",
-                  answers[currentQuestion.id]?.correct ? "bg-accent-green/10 border-accent-green/20 text-accent-green" : "bg-red-500/10 border-red-500/20 text-red-400",
+                  answers[currentQuestion.id]?.correct
+                    ? "bg-accent-green/10 border-accent-green/20 text-accent-green"
+                    : "bg-red-500/10 border-red-500/20 text-red-400",
                 )}
               >
                 {answers[currentQuestion.id]?.correct ? (
@@ -549,6 +561,7 @@ export function PvPMatchModal({
         </div>
       </div>
 
+      {/* Bottom Bar */}
       <div className="border-t border-white/10 bg-[#0e1220] px-4 md:px-6 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3 text-xs text-muted-light">
@@ -575,7 +588,7 @@ export function PvPMatchModal({
                 {currentIndex >= totalQuestions - 1 ? (
                   <><Trophy className="w-4 h-4" /> Finish</>
                 ) : (
-                  <>Next <ChevronRightIcon className="w-4 h-4" /></>
+                  <>Next <ChevronRight className="w-4 h-4" /></>
                 )}
               </Button>
             )}
@@ -583,13 +596,5 @@ export function PvPMatchModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function ChevronRightIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m9 18 6-6-6-6" />
-    </svg>
   );
 }

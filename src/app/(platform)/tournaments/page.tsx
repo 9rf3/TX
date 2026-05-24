@@ -17,10 +17,10 @@ import {
   registerForTournament, cancelRegistration,
   getTournamentLeaderboard, getRegistrationCount, getTournamentQuestions,
 } from "@/actions/tournaments";
+import Link from "next/link";
 import { TournamentPlayModal } from "@/components/tournaments/TournamentPlayModal";
-import { PvPMatchModal } from "@/components/tournaments/PvPMatchModal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import type { Tournament, TournamentRegistration, LeaderboardEntry, PvPCategory } from "@/lib/types";
+import type { Tournament, TournamentRegistration, LeaderboardEntry } from "@/lib/types";
 
 /* ==================================================================== */
 /*  Countdown Hook                                                       */
@@ -462,7 +462,6 @@ export default function TournamentsPage() {
 
   // Modal states
   const [enteringTournament, setEnteringTournament] = useState<Tournament | null>(null);
-  const [pvPMatchCategory, setPvPMatchCategory] = useState<PvPCategory | null>(null);
   const [viewingResults, setViewingResults] = useState<Tournament | null>(null);
   const [viewingResultsData, setViewingResultsData] = useState<LeaderboardEntry[]>([]);
 
@@ -580,7 +579,7 @@ export default function TournamentsPage() {
           )}
 
           {/* PvP Arena */}
-          <PvpArenaSection onStartMatch={(cat) => setPvPMatchCategory(cat)} />
+          <PvpArenaSection />
 
           {/* Completed Tournaments */}
           {completedTournaments.length > 0 && (
@@ -631,17 +630,6 @@ export default function TournamentsPage() {
           <TournamentPlayModal
             tournament={enteringTournament}
             onClose={() => { setEnteringTournament(null); refetch(); }}
-          />
-        </ErrorBoundary>
-      )}
-
-      {/* PvP Match Modal */}
-      {pvPMatchCategory && user && (
-        <ErrorBoundary onError={() => { setPvPMatchCategory(null); }}>
-          <PvPMatchModal
-            category={pvPMatchCategory}
-            onClose={() => { setPvPMatchCategory(null); }}
-            currentUserId={user.id}
           />
         </ErrorBoundary>
       )}
@@ -705,16 +693,8 @@ export default function TournamentsPage() {
 /*  PvP Arena Section                                                    */
 /* ==================================================================== */
 
-function PvpArenaSection({ onStartMatch }: { onStartMatch: (cat: PvPCategory) => void }) {
+function PvpArenaSection() {
   const { user } = useAuth();
-  const [selectedCategory, setSelectedCategory] = useState<PvPCategory>("javascript");
-
-  const categories = [
-    { id: "javascript" as PvPCategory, label: "JavaScript", icon: "JS", color: "#f7df1e", bg: "from-yellow-600/10 to-yellow-800/5" },
-    { id: "react" as PvPCategory, label: "React", icon: "⚛", color: "#61dafb", bg: "from-cyan-600/10 to-blue-800/5" },
-    { id: "algorithms" as PvPCategory, label: "Algorithms", icon: "Δ", color: "#8b5cf6", bg: "from-violet-600/10 to-purple-800/5" },
-    { id: "python" as PvPCategory, label: "Python", icon: "🐍", color: "#3776ab", bg: "from-blue-600/10 to-indigo-800/5" },
-  ];
 
   return (
     <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -750,15 +730,16 @@ function PvpArenaSection({ onStartMatch }: { onStartMatch: (cat: PvPCategory) =>
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              className="w-full"
-              glow
-              disabled={!user}
-              onClick={() => onStartMatch(selectedCategory)}
-            >
-              <Swords className="w-4 h-4" /> Fight Now
-            </Button>
+            <Link href="/pvp">
+              <Button
+                variant="primary"
+                className="w-full"
+                glow
+                disabled={!user}
+              >
+                <Swords className="w-4 h-4" /> Fight Now
+              </Button>
+            </Link>
           </div>
         </div>
 
@@ -773,38 +754,18 @@ function PvpArenaSection({ onStartMatch }: { onStartMatch: (cat: PvPCategory) =>
               <Badge variant="warning" size="sm">Quick</Badge>
             </div>
             <h3 className="text-xl font-extrabold text-white mb-1.5 tracking-tight">QUICK MATCH</h3>
-            <p className="text-sm text-muted-light mb-6">Find a random opponent in your skill range for a fast duel</p>
+            <p className="text-sm text-muted-light mb-6">Find a random opponent for a fast coding duel</p>
 
-            <div className="mb-6">
-              <p className="text-xs text-muted-light mb-2 uppercase tracking-wider">Select Category</p>
-              <div className="grid grid-cols-2 gap-2">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all cursor-pointer",
-                      selectedCategory === cat.id
-                        ? "border-primary/40 bg-primary/10 text-primary-light"
-                        : "border-white/5 bg-white/[0.03] text-muted-light hover:border-white/10",
-                    )}
-                  >
-                    <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              variant="primary"
-              className="w-full"
-              glow
-              disabled={!selectedCategory || !user}
-              onClick={() => onStartMatch(selectedCategory)}
-            >
-              <Zap className="w-4 h-4" /> Quick Match
-            </Button>
+            <Link href="/pvp">
+              <Button
+                variant="primary"
+                className="w-full"
+                glow
+                disabled={!user}
+              >
+                <Zap className="w-4 h-4" /> Quick Match
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

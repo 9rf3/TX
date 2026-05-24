@@ -37,120 +37,8 @@ export async function getUserMatches() {
   return data as PvPMatch[];
 }
 
-export async function createMatch(category: PvPCategory) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data, error } = await supabase
-    .from("pvp_matches")
-    .insert({
-      player_1_id: user.id,
-      category,
-      status: "waiting",
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as PvPMatch;
-}
-
-export async function joinMatch(matchId: string) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data, error } = await supabase
-    .from("pvp_matches")
-    .update({
-      player_2_id: user.id,
-      status: "active",
-      started_at: new Date().toISOString(),
-      current_state_hash: crypto.randomUUID(),
-    })
-    .eq("id", matchId)
-    .eq("status", "waiting")
-    .is("player_2_id", null)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as PvPMatch;
-}
-
-export async function getMatchStatus(matchId: string) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data, error } = await supabase
-    .from("pvp_matches")
-    .select("*")
-    .eq("id", matchId)
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as PvPMatch;
-}
-
-export async function findAvailableMatches(category?: PvPCategory) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  let query = supabase
-    .from("pvp_matches")
-    .select("*")
-    .eq("status", "waiting")
-    .is("player_2_id", null)
-    .neq("player_1_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(10);
-
-  if (category) {
-    query = query.eq("category", category);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data as PvPMatch[];
-}
-
-export async function getPvPStats() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { total: 0, wins: 0, losses: 0, winRate: 0 };
-
-  const { data: matches, error } = await supabase
-    .from("pvp_matches")
-    .select("*")
-    .or(`player_1_id.eq.${user.id},player_2_id.eq.${user.id}`)
-    .eq("status", "completed");
-
-  if (error) throw new Error(error.message);
-
-  const total = matches?.length ?? 0;
-  const wins = matches?.filter((m) => m.winner_id === user.id).length ?? 0;
-  const losses = total - wins;
-
-  return {
-    total,
-    wins,
-    losses,
-    winRate: total > 0 ? Math.round((wins / total) * 100) : 0,
-  };
-}
-
 /* ==================================================================== */
-/*  QUICK MATCH — finds or creates a PvP match                           */
+/*  MATCH CREATION — find existing or create new                         */
 /* ==================================================================== */
 
 export async function quickMatch(category: PvPCategory) {
@@ -160,7 +48,8 @@ export async function quickMatch(category: PvPCategory) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Look for an available match in this category
+  // Atomic: try to claim a waiting match
+  // Use a serializable-like approach: lock row by updating immediately
   const { data: available } = await supabase
     .from("pvp_matches")
     .select("*")
@@ -171,11 +60,9 @@ export async function quickMatch(category: PvPCategory) {
     .order("created_at", { ascending: true })
     .limit(1);
 
-  let match: PvPMatch;
-
   if (available && available.length > 0) {
-    // Join existing match
-    const joined = await supabase
+    const target = available[0];
+    const { data: joined, error } = await supabase
       .from("pvp_matches")
       .update({
         player_2_id: user.id,
@@ -183,55 +70,87 @@ export async function quickMatch(category: PvPCategory) {
         started_at: new Date().toISOString(),
         current_state_hash: crypto.randomUUID(),
       })
-      .eq("id", available[0].id)
+      .eq("id", target.id)
       .eq("status", "waiting")
+      .is("player_2_id", null)
       .select()
       .single();
 
-    if (joined.error) throw new Error(joined.error.message);
-    match = joined.data as PvPMatch;
-  } else {
-    // Create new match
-    const created = await supabase
-      .from("pvp_matches")
-      .insert({
-        player_1_id: user.id,
-        category,
-        status: "waiting",
-      })
-      .select()
-      .single();
-
-    if (created.error) throw new Error(created.error.message);
-    match = created.data as PvPMatch;
+    if (!error && joined) {
+      const questions = getQuestionsForCategory(category, joined.id);
+      return { match: joined as PvPMatch, questions };
+    }
+    // Race lost — another player claimed it; fall through to create new
   }
 
-  const questions = getQuestionsForCategory(category, match.id);
+  // Create new waiting match
+  const { data: created, error: createErr } = await supabase
+    .from("pvp_matches")
+    .insert({
+      player_1_id: user.id,
+      category,
+      status: "waiting",
+    })
+    .select()
+    .single();
 
-  return { match, questions };
+  if (createErr) throw new Error(createErr.message);
+
+  const questions = getQuestionsForCategory(category, created.id);
+  return { match: created as PvPMatch, questions };
 }
 
 /* ==================================================================== */
-/*  GET PVP QUESTIONS for a given match                                  */
+/*  MATCH STATE — get current match state for polling                    */
 /* ==================================================================== */
 
-export async function getPvPQuestions(matchId: string) {
+export async function getMatchState(matchId: string) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { data: match, error } = await supabase
+  const { data: match } = await supabase
     .from("pvp_matches")
     .select("*")
     .eq("id", matchId)
     .single();
 
-  if (error || !match) throw new Error("Match not found");
+  if (!match) throw new Error("Match not found");
 
-  return getQuestionsForCategory(match.category as PvPCategory, matchId);
+  return {
+    id: match.id,
+    status: match.status,
+    player1Id: match.player_1_id,
+    player2Id: match.player_2_id,
+    p1Score: match.player_1_score ?? 0,
+    p2Score: match.player_2_score ?? 0,
+    winnerId: match.winner_id,
+    category: match.category,
+  };
 }
 
 /* ==================================================================== */
-/*  SUBMIT PVP ANSWER                                                    */
+/*  CANCEL MATCH — cancel a waiting match before it starts               */
+/* ==================================================================== */
+
+export async function cancelMatch(matchId: string) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("pvp_matches")
+    .update({ status: "cancelled", completed_at: new Date().toISOString() })
+    .eq("id", matchId)
+    .eq("status", "waiting");
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
+/* ==================================================================== */
+/*  SUBMIT PVP ANSWER — evaluate and score                               */
 /* ==================================================================== */
 
 export async function submitPvPAnswer(
@@ -259,13 +178,12 @@ export async function submitPvPAnswer(
 
   // Find the question and evaluate
   const questions = getQuestionsForCategory(match.category as PvPCategory, matchId);
-  const question = questions.find((q: { id: string }) => q.id === questionId);
+  const question = questions.find((q) => q.id === questionId);
   if (!question) throw new Error("Question not found");
 
   const correct = evaluateAnswer(question, answer);
   const points = correct ? (question.points ?? 100) : 0;
 
-  // Update match score
   const updateField = isPlayer1 ? "player_1_score" : "player_2_score";
   const currentScore = isPlayer1 ? (match.player_1_score ?? 0) : (match.player_2_score ?? 0);
   const newScore = currentScore + points;
@@ -301,7 +219,6 @@ export async function completePvPMatch(matchId: string) {
 
   if (!match) throw new Error("Match not found");
   if (match.player_2_id === null) {
-    // No opponent yet — cancel
     await supabase
       .from("pvp_matches")
       .update({ status: "cancelled", completed_at: new Date().toISOString() })
@@ -315,7 +232,6 @@ export async function completePvPMatch(matchId: string) {
 
   if (p1Score > p2Score) winnerId = match.player_1_id;
   else if (p2Score > p1Score) winnerId = match.player_2_id;
-  // Scores are equal — no winner (draw)
 
   await supabase
     .from("pvp_matches")
@@ -326,7 +242,6 @@ export async function completePvPMatch(matchId: string) {
     })
     .eq("id", matchId);
 
-  // Award rewards
   const isWinner = winnerId === user.id;
   const xpReward = isWinner ? 50 : 15;
   const coinReward = isWinner ? 25 : 5;
@@ -349,7 +264,6 @@ export async function completePvPMatch(matchId: string) {
     });
   } catch { /* non-critical */ }
 
-  // Update profile pvp_won stat if winner
   if (isWinner) {
     try {
       const { data: profile } = await supabase
@@ -378,31 +292,53 @@ export async function completePvPMatch(matchId: string) {
 }
 
 /* ==================================================================== */
-/*  PVP MATCH STATE — poll for match updates                             */
+/*  PVP STATS                                                            */
 /* ==================================================================== */
 
-export async function getPvPMatchState(matchId: string) {
+export async function getPvPStats() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { data: match } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { total: 0, wins: 0, losses: 0, winRate: 0 };
+
+  const { data: matches, error } = await supabase
+    .from("pvp_matches")
+    .select("*")
+    .or(`player_1_id.eq.${user.id},player_2_id.eq.${user.id}`)
+    .eq("status", "completed");
+
+  if (error) throw new Error(error.message);
+
+  const total = matches?.length ?? 0;
+  const wins = matches?.filter((m) => m.winner_id === user.id).length ?? 0;
+  const losses = total - wins;
+
+  return {
+    total,
+    wins,
+    losses,
+    winRate: total > 0 ? Math.round((wins / total) * 100) : 0,
+  };
+}
+
+/* ==================================================================== */
+/*  GET PVP QUESTIONS                                                    */
+/* ==================================================================== */
+
+export async function getPvPQuestions(matchId: string) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data: match, error } = await supabase
     .from("pvp_matches")
     .select("*")
     .eq("id", matchId)
     .single();
 
-  if (!match) throw new Error("Match not found");
+  if (error || !match) throw new Error("Match not found");
 
-  return {
-    id: match.id,
-    status: match.status,
-    player1Id: match.player_1_id,
-    player2Id: match.player_2_id,
-    p1Score: match.player_1_score ?? 0,
-    p2Score: match.player_2_score ?? 0,
-    winnerId: match.winner_id,
-    category: match.category,
-  };
+  return getQuestionsForCategory(match.category as PvPCategory, matchId);
 }
 
 /* ==================================================================== */
@@ -424,14 +360,12 @@ interface PvPQuestion {
 
 function getQuestionsForCategory(category: PvPCategory, seed: string): PvPQuestion[] {
   const bank = QUESTION_BANKS[category] ?? QUESTION_BANKS.general;
-  // Deterministic shuffle based on seed
   const shuffled = [...bank];
   const hash = seed.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = (hash + i) % (i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  // Return first 5 questions
   return shuffled.slice(0, 5).map((q, i) => ({
     ...q,
     id: `${seed}-q${i}`,
@@ -444,7 +378,6 @@ function evaluateAnswer(question: PvPQuestion, answer: string): boolean {
   }
   const answerLower = answer.toLowerCase();
   const correctLower = question.correctAnswer.toLowerCase();
-  // For coding/written, check for key terms or exact match
   const keywords = correctLower.split(/\s+/).filter((k) => k.length > 3);
   if (keywords.length > 0) {
     const matchCount = keywords.filter((kw) => answerLower.includes(kw)).length;
@@ -476,7 +409,7 @@ const QUESTION_BANKS: Record<string, PvPQuestion[]> = {
   ],
   algorithms: [
     { id: "algo-1", type: "multiple_choice", data: { question: "What is the time complexity of binary search?", options: ["O(n)", "O(log n)", "O(n^2)", "O(1)"] }, points: 100, correctAnswer: "O(log n)" },
-    { id: "algo-2", type: "multiple_choice", data: { question: "Which data structure operates on LIFO principle?", options: ["Queue", "Stack", "Array", "Linked List"] }, points: 100, correctAnswer: "Stack" },
+    { id: "algo-2", type: "multiple_choice", data: { question: "Which data structure operates on LIFO principle?", options: ["Queue", "Queue", "Stack", "Array", "Linked List"] }, points: 100, correctAnswer: "Stack" },
     { id: "algo-3", type: "multiple_choice", data: { question: "What is the worst-case time complexity of quicksort?", options: ["O(n log n)", "O(n)", "O(n^2)", "O(log n)"] }, points: 100, correctAnswer: "O(n^2)" },
     { id: "algo-4", type: "coding_challenge", data: { question: "Write a function to find the maximum element in an array.", code: "function findMax(arr) {\n  // Your code here\n}" }, points: 200, correctAnswer: "Math.max" },
     { id: "algo-5", type: "multiple_choice", data: { question: "Which traversal visits the left subtree, then root, then right subtree?", options: ["Pre-order", "In-order", "Post-order", "Level-order"] }, points: 100, correctAnswer: "In-order" },
