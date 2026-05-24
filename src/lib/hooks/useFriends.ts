@@ -65,9 +65,10 @@ export function useFriends() {
       }));
 
       setFriendships(populatedFriendships);
-    } catch (err: any) {
-      console.error("Error fetching friends:", err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error fetching friends:", error.message);
+      setError(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -90,8 +91,9 @@ export function useFriends() {
 
       if (rErr) throw rErr;
       setRequests(rData as unknown as FriendRequest[]);
-    } catch (err: any) {
-      console.error("Error fetching requests:", err.message);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error fetching requests:", error.message);
     } finally {
       setIsLoading(false);
     }
@@ -111,9 +113,10 @@ export function useFriends() {
 
       if (err) throw err;
       return true;
-    } catch (err: any) {
-      console.error("Error sending request:", err.message);
-      throw err;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error sending request:", error.message);
+      throw error;
     }
   };
 
@@ -126,9 +129,10 @@ export function useFriends() {
       setRequests(prev => prev.filter(r => r.id !== requestId));
       fetchFriends();
       return true;
-    } catch (err: any) {
-      console.error("Error accepting request:", err.message);
-      throw err;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error accepting request:", error.message);
+      throw error;
     }
   };
 
@@ -143,9 +147,10 @@ export function useFriends() {
       
       setRequests(prev => prev.filter(r => r.id !== requestId));
       return true;
-    } catch (err: any) {
-      console.error("Error rejecting request:", err.message);
-      throw err;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error rejecting request:", error.message);
+      throw error;
     }
   };
 

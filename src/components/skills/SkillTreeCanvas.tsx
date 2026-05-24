@@ -1,7 +1,5 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
-import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
 import { SkillNode } from "./SkillNode";
 import { SkillDetailsPanel } from "./SkillDetailsPanel";
 import type { SkillNodeWithProgress } from "@/lib/hooks/useSkillTree";

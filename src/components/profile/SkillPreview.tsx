@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
@@ -36,7 +36,6 @@ interface SkillPreviewProps {
 export function SkillPreview({ skills = [], userProgress = [], availablePoints = 0 }: SkillPreviewProps) {
   const router = useRouter();
   const progressMap = new Map(userProgress.map(s => [s.skill_id, s]));
-  const [activeIndex, setActiveIndex] = useState(0);
 
   const displaySkills = skills.slice(0, 6).map(skill => {
     const progress = progressMap.get(skill.id);

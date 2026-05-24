@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Calendar } from "lucide-react";
+import { Calendar, Zap, Brain, Mic, Code, Globe, Shield } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import {
-  upcomingTournaments,
-  type UpcomingTournamentEntry,
+  upcomingTournaments as defaultUpcoming,
 } from "@/components/tournaments/data";
+import { useTournaments } from "@/components/providers/TournamentProvider";
 
 /* ------------------------------------------------------------------ */
 /*  Icon components                                                    */
@@ -61,11 +61,30 @@ function AlgoIcon() {
   );
 }
 
-const iconMap: Record<UpcomingTournamentEntry["iconType"], React.FC> = {
+const iconMap: Record<string, React.ElementType> = {
   html: HtmlIcon,
   python: PythonIcon,
   react: ReactIcon,
   algo: AlgoIcon,
+  zap: Zap,
+  brain: Brain,
+  mic: Mic,
+  code: Code,
+  globe: Globe,
+  shield: Shield,
+};
+
+const COLOR_MAP: Record<string, string> = {
+  html: "#E34F26",
+  python: "#3776AB",
+  react: "#06B6D4",
+  algo: "#8B5CF6",
+  zap: "#8B5CF6",
+  brain: "#3B82F6",
+  mic: "#F59E0B",
+  code: "#10B981",
+  globe: "#06B6D4",
+  shield: "#EF4444",
 };
 
 /* ------------------------------------------------------------------ */
@@ -73,6 +92,23 @@ const iconMap: Record<UpcomingTournamentEntry["iconType"], React.FC> = {
 /* ------------------------------------------------------------------ */
 
 export function UpcomingTournaments() {
+  const { tournaments, isHydrated } = useTournaments();
+
+  const upcomingItems = isHydrated
+    ? tournaments.filter((t) => t.status === "UPCOMING")
+    : defaultUpcoming.map((item) => ({
+        id: `upcoming-${item.id}`,
+        status: "UPCOMING" as const,
+        title: item.title,
+        iconType: item.iconType,
+        iconBg: item.iconBg,
+        date: item.date,
+        time: item.time,
+        prize: item.prize,
+        prizeDisplay: item.prize,
+        participants: item.participants,
+      }));
+
   return (
     <Card hover={false} className="p-0 overflow-hidden">
       {/* Header */}
@@ -90,8 +126,23 @@ export function UpcomingTournaments() {
 
       {/* List */}
       <div className="px-3 pb-3">
-        {upcomingTournaments.map((t, i) => {
-          const Icon = iconMap[t.iconType];
+        {upcomingItems.map((t, i) => {
+          const isDynamic = typeof t.id === "string" && !t.id.startsWith("upcoming-");
+          
+          const dateStr = isDynamic
+            ? new Date((t as Record<string, unknown>).endTime as string | number).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+            : (t as Record<string, unknown>).date as string || "TBD";
+            
+          const timeStr = isDynamic
+            ? new Date((t as Record<string, unknown>).endTime as string | number).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+            : (t as Record<string, unknown>).time as string || "TBD";
+
+          const prizeStr = (t as Record<string, unknown>).prizeDisplay as string || `${((t as Record<string, unknown>).prizePool as number)?.toLocaleString()} TX`;
+
+          const iconKey = ((t as Record<string, unknown>).iconType || (t as Record<string, unknown>).iconName || "zap") as string;
+          const Icon = iconMap[iconKey] || Zap;
+          const iconBgColor = (t as Record<string, unknown>).iconBg as string || COLOR_MAP[iconKey] || "#8B5CF6";
+
           return (
             <motion.div
               key={t.id}
@@ -112,9 +163,9 @@ export function UpcomingTournaments() {
                 {/* Icon block */}
                 <div
                   className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg"
-                  style={{ backgroundColor: `${t.iconBg}20`, color: t.iconBg }}
+                  style={{ backgroundColor: `${iconBgColor}20`, color: iconBgColor }}
                 >
-                  <Icon />
+                  <Icon className="w-5 h-5" />
                 </div>
 
                 {/* Info */}
@@ -123,10 +174,10 @@ export function UpcomingTournaments() {
                     {t.title}
                   </p>
                   <p className="text-[11px] text-muted mt-0.5">
-                    {t.date} · {t.time}
+                    {dateStr} · {timeStr}
                   </p>
                   <p className="text-[11px] font-semibold text-amber-400 mt-0.5">
-                    🏆 {t.prize}
+                    🏆 {prizeStr}
                   </p>
                 </div>
 

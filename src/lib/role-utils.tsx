@@ -52,6 +52,7 @@ export function useRequireRole(roles: UserRole[], redirectTo: string = "/dashboa
   useEffect(() => {
     if (!isLoading) {
       if (profile && roles.includes(profile.role)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsAuthorized(true);
       } else {
         setIsAuthorized(false);

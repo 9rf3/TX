@@ -39,9 +39,10 @@ export function useUsers() {
 
       setUsers(processedData);
       if (count !== null) setTotalCount(count);
-    } catch (err: any) {
-      console.error("Error fetching users:", err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("Error fetching users:", error.message);
+      setError(error.message);
     } finally {
       setIsLoading(false);
     }

@@ -5,10 +5,11 @@ import { Trophy } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import {
-  leaderboardData,
+  leaderboardData as defaultLeaderboardData,
   currentPlayerLeaderboard,
   type LeaderboardUser,
 } from "@/components/tournaments/data";
+import { useTournaments } from "@/components/providers/TournamentProvider";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -102,6 +103,11 @@ function LeaderboardRow({
 /* ------------------------------------------------------------------ */
 
 export function LeaderboardSnippet() {
+  const { leaderboard, isHydrated } = useTournaments();
+
+  const leaders = isHydrated ? leaderboard : defaultLeaderboardData;
+  const topFive = leaders.slice(0, 5);
+
   return (
     <Card hover={false} className="p-0 overflow-hidden">
       {/* Header */}
@@ -131,23 +137,23 @@ export function LeaderboardSnippet() {
 
       {/* Top 5 */}
       <div className="px-2 space-y-0.5">
-        {leaderboardData.map((entry, i) => (
-          <LeaderboardRow key={entry.rank} entry={entry} index={i} />
+        {topFive.map((entry, i) => (
+          <LeaderboardRow key={entry.username} entry={entry} index={i} />
         ))}
       </div>
 
       {/* Separator dots */}
       <div className="flex items-center justify-center gap-1 py-2">
-        <span className="w-1 h-1 rounded-full bg-muted/40" />
-        <span className="w-1 h-1 rounded-full bg-muted/40" />
-        <span className="w-1 h-1 rounded-full bg-muted/40" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted/40" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted/40" />
+        <span className="w-1.5 h-1.5 rounded-full bg-muted/40" />
       </div>
 
       {/* Current user */}
       <div className="px-2 pb-3">
         <LeaderboardRow
           entry={currentPlayerLeaderboard}
-          index={leaderboardData.length}
+          index={topFive.length}
           isCurrentUser
         />
       </div>

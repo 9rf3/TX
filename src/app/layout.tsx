@@ -17,6 +17,7 @@ export const metadata: Metadata = {
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { TournamentProvider } from "@/components/providers/TournamentProvider";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let initialUser = null;
@@ -35,7 +36,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${inter.variable} dark`}>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased">
         <AuthProvider initialUser={initialUser} initialProfile={null}>
-          {children}
+          <TournamentProvider>
+            {children}
+          </TournamentProvider>
         </AuthProvider>
       </body>
     </html>

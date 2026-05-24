@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import type { DbCategory } from "@/lib/types";
 
@@ -88,13 +88,9 @@ export function useCategories() {
     }
   };
 
-  // Auto-fetch on first call, useRef avoids strict-mode double-fetch issues
-  // and satisfies the set-state-in-effect lint rule
-  const initRef = useRef(false);
-  if (!initRef.current) {
-    initRef.current = true;
+  useEffect(() => {
     fetchCategories();
-  }
+  }, [fetchCategories]);
 
   return {
     categories, fetchCategories, createCategory,

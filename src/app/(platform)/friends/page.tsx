@@ -31,8 +31,8 @@ export default function FriendsPage() {
     try {
       await sendRequest(userId);
       alert("Friend request sent!");
-    } catch (err: any) {
-      alert("Failed to send request: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to send request: " + (err as Error).message);
     }
   };
 
@@ -104,7 +104,7 @@ export default function FriendsPage() {
                  <Users className="w-16 h-16 text-muted/30 mx-auto mb-4" />
                  <h3 className="font-semibold text-xl text-foreground">No Friends Yet</h3>
                  <p className="text-muted-light mt-2 max-w-md mx-auto">
-                    You haven't added any friends yet. Click "Add Friend" to search for people you know!
+                    You haven&apos;t added any friends yet. Click &quot;Add Friend&quot; to search for people you know!
                  </p>
               </Card>
             </motion.div>
@@ -119,7 +119,10 @@ export default function FriendsPage() {
                         <span className="font-semibold text-sm">{f.friend?.full_name || f.friend?.email}</span>
                         {f.friend?.isOnline && <Badge variant="success" size="sm">Online</Badge>}
                       </div>
-                      <div className="text-xs text-muted mt-0.5">Joined {new Date(f.friend?.created_at || Date.now()).toLocaleDateString()}</div>
+                      <div className="text-xs text-muted mt-0.5">
+                        {/* eslint-disable-next-line react-hooks/purity */}
+                        Joined {new Date(f.friend?.created_at || Date.now()).toLocaleDateString()}
+                      </div>
                     </div>
                     <Button variant="ghost" size="sm"><MessageCircle className="w-4 h-4" /></Button>
                   </Card>

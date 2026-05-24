@@ -5,7 +5,8 @@ import { Trophy, Star, Users, Coins, Crown, Timer, Award } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
-import { heroStats, currentSeason, type HeroStat } from "@/components/tournaments/data";
+import { currentSeason, type HeroStat, heroStats as defaultHeroStats } from "@/components/tournaments/data";
+import { useTournaments } from "@/components/providers/TournamentProvider";
 
 /* ───────────────────── icon map ───────────────────── */
 const ICON_MAP: Record<HeroStat["iconName"], React.ElementType> = {
@@ -46,8 +47,11 @@ const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 /* ───────────────────── component ───────────────────── */
 export function HeroBanner() {
+  const { heroStats, isHydrated } = useTournaments();
   const seasonEnd = new Date(currentSeason.endDate);
   const countdown = useCountdown(seasonEnd);
+
+  const statsToRender = isHydrated ? heroStats : defaultHeroStats;
 
   return (
     <motion.div
@@ -146,7 +150,7 @@ export function HeroBanner() {
 
         {/* Stat badges — uniform 4-column grid */}
         <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {heroStats.map((stat) => {
+          {statsToRender.map((stat) => {
             const Icon = ICON_MAP[stat.iconName];
             return (
               <div

@@ -44,12 +44,11 @@ export function Progress({ value, max = 100, size = "md", color = "primary", sho
 
 interface XPRingProps {
   xp: number;
-  xpToNext: number;
   level: number;
   size?: number;
 }
 
-export function XPRing({ xp, xpToNext, level, size = 120 }: XPRingProps) {
+export function XPRing({ xp, level, size = 120 }: XPRingProps) {
   const pct = (xp % 1000) / 1000;
   const r = (size - 12) / 2;
   const circumference = 2 * Math.PI * r;

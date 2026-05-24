@@ -45,7 +45,7 @@ export function AISection() {
                     <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%]">
                       <p className="text-sm text-[#e2e8f0] mb-3">Great question! A closure is a function that &quot;remembers&quot; variables from its outer scope, even after the outer function has returned.</p>
                       <div className="bg-[#0a0a0f] rounded-xl p-3 font-mono text-xs text-[#a78bfa] border border-white/[0.06]">
-                        <div className="text-[#64748b]">// Closure example</div>
+                        <div className="text-[#64748b]">{"// Closure example"}</div>
                         <div><span className="text-[#ec4899]">function</span> <span className="text-[#06b6d4]">counter</span>() {"{"}</div>
                         <div>  <span className="text-[#ec4899]">let</span> count = <span className="text-[#f59e0b]">0</span>;</div>
                         <div>  <span className="text-[#ec4899]">return</span> () =&gt; ++count;</div>

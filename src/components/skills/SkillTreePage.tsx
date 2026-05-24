@@ -11,7 +11,7 @@ export function SkillTreePage() {
     try {
       const result = await invest(skillId);
       return { xpRewarded: result.xpRewarded, coinsRewarded: result.coinsRewarded };
-    } catch (err) {
+    } catch {
       return undefined;
     }
   };

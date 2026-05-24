@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Zap, TrendingUp, ArrowUpRight } from "lucide-react";
+import { TrendingUp, ArrowUpRight } from "lucide-react";
 import { getRankTier, getNextRankTier } from "@/lib/types";
 
 interface XPProgressCardProps {

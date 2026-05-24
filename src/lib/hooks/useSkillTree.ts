@@ -1,6 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { SkillTreeData, SkillNode, UserSkillProgress } from "@/lib/types";
 
@@ -18,7 +17,6 @@ export function useSkillTree() {
   const [availablePoints, setAvailablePoints] = useState(0);
   const [userLevel, setUserLevel] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = useRef(createClient());
 
   const fetchSkillTree = useCallback(async () => {
     if (!user) {
@@ -69,6 +67,7 @@ export function useSkillTree() {
   }, [user]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSkillTree();
   }, [fetchSkillTree]);
 

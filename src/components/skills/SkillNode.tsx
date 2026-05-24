@@ -1,8 +1,8 @@
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Brain, Book, Eye, Target, Puzzle, Mic, Search, Clock,
-  Circle, Lock, Zap, Crown, Star, Sparkles,
+  Circle, Lock, Zap, Crown, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SkillNodeWithProgress } from "@/lib/hooks/useSkillTree";
@@ -60,7 +60,6 @@ export function SkillNode({ skill, onClick, isSelected, gridSize }: SkillNodePro
   const isUnlocked = skill.isUnlocked && !skill.isMaxed;
   const isMastered = skill.isMaxed;
 
-  const glowIntensity = isMastered ? 4 : isUnlocked ? 2 : isSelected ? 2 : 1;
 
   return (
     <motion.button

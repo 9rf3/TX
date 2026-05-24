@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/purity */
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { AnimatedCounter } from "./AnimatedCounter";

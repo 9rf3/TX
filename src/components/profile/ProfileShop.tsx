@@ -1,14 +1,14 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShoppingBag, Sparkles, Lock, Check, Star, Zap,
-  EqualApproximately, Crown, Frame, Palette, Image,
+  ShoppingBag, Sparkles, Check, Star,
+  Frame, Palette, Image,
   BadgeCheck, Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RARITY_COLORS, RARITY_GLOWS } from "@/lib/types";
-import type { ShopItem, UserInventoryItem, GamificationProfile } from "@/lib/types";
+import type { ShopItem, GamificationProfile } from "@/lib/types";
 
 const typeIcons: Record<string, typeof Frame> = {
   avatar_frame: Frame, profile_banner: Image, profile_theme: Palette,

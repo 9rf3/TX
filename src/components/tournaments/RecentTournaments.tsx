@@ -5,15 +5,19 @@ import { History, Trophy, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import {
-  recentTournamentHistory,
-  type RecentTournamentEntry,
+  recentTournamentHistory as defaultHistory,
 } from "@/components/tournaments/data";
+import { useTournaments } from "@/components/providers/TournamentProvider";
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
 export function RecentTournaments() {
+  const { recentHistory, isHydrated } = useTournaments();
+
+  const history = isHydrated ? recentHistory : defaultHistory;
+
   return (
     <Card hover={false} className="p-0 overflow-hidden">
       {/* Header */}
@@ -26,7 +30,7 @@ export function RecentTournaments() {
 
       {/* List */}
       <div className="px-3 pb-3">
-        {recentTournamentHistory.map((t, i) => {
+        {history.map((t, i) => {
           const won = t.status === "Won";
 
           return (

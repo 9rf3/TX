@@ -26,6 +26,7 @@ const adminNavItems = [
   { href: "/admin", label: "Admin", icon: Shield },
   { href: "/admin/courses", label: "Admin Courses", icon: BookOpen },
   { href: "/admin/categories", label: "Categories", icon: Tags },
+  { href: "/admin/tournaments", label: "Admin Tournaments", icon: Trophy },
 ];
 
 interface SidebarProps {

@@ -13,12 +13,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { cn } from "@/lib/utils";
 import {
-  liveTournaments,
+  liveTournaments as defaultLiveTournaments,
   DIFFICULTY_CONFIG,
   type TournamentCard,
 } from "@/components/tournaments/data";
+import { useTournaments } from "@/components/providers/TournamentProvider";
 
 /* ───────────────────── icon map ───────────────────── */
 const ICON_MAP: Record<TournamentCard["iconName"], React.ElementType> = {
@@ -32,22 +32,23 @@ const ICON_MAP: Record<TournamentCard["iconName"], React.ElementType> = {
 
 /* ───────────────────── countdown hook ───────────────────── */
 function useCountdowns(tournaments: TournamentCard[]) {
-  const calc = () =>
-    tournaments.map((t) => {
-      const diff = Math.max(0, new Date(t.endTime).getTime() - Date.now());
-      const h = Math.floor(diff / 3_600_000);
-      const m = Math.floor((diff % 3_600_000) / 60_000);
-      const s = Math.floor((diff % 60_000) / 1_000);
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    });
-
-  const [times, setTimes] = useState(calc);
+  const [times, setTimes] = useState<string[]>([]);
 
   useEffect(() => {
-    const id = setInterval(() => setTimes(calc), 1_000);
+    const calc = () =>
+      tournaments.map((t) => {
+        const diff = Math.max(0, new Date(t.endTime).getTime() - Date.now());
+        const h = Math.floor(diff / 3_600_000);
+        const m = Math.floor((diff % 3_600_000) / 60_000);
+        const s = Math.floor((diff % 60_000) / 1_000);
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTimes(calc());
+    const id = setInterval(() => setTimes(calc()), 1_000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tournaments]);
 
   return times;
 }
@@ -65,12 +66,10 @@ const cardAnim = {
 /* ───────────────────── stat block subcomponent ───────────────────── */
 function StatBlock({
   icon,
-  iconColor,
   value,
   label,
 }: {
   icon: React.ReactNode;
-  iconColor?: string;
   value: string;
   label: string;
 }) {
@@ -85,7 +84,13 @@ function StatBlock({
 
 /* ───────────────────── component ───────────────────── */
 export function LiveTournamentsGrid() {
-  const countdowns = useCountdowns(liveTournaments);
+  const { tournaments, isHydrated } = useTournaments();
+
+  const liveItems = isHydrated
+    ? tournaments.filter((t) => t.status === "LIVE")
+    : defaultLiveTournaments;
+
+  const countdowns = useCountdowns(liveItems);
 
   return (
     <motion.section variants={container} initial="hidden" animate="show">
@@ -97,7 +102,7 @@ export function LiveTournamentsGrid() {
             Live Tournaments
           </h2>
           <Badge variant="danger" size="sm">
-            {liveTournaments.length} Live
+            {liveItems.length} Live
           </Badge>
         </div>
         <button className="text-sm text-muted-light hover:text-primary-light transition-colors flex items-center gap-1 group cursor-pointer">
@@ -107,9 +112,9 @@ export function LiveTournamentsGrid() {
 
       {/* card grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {liveTournaments.map((t, i) => {
-          const Icon = ICON_MAP[t.iconName];
-          const diffConfig = DIFFICULTY_CONFIG[t.difficulty];
+        {liveItems.map((t, i) => {
+          const Icon = ICON_MAP[t.iconName] || Zap;
+          const diffConfig = DIFFICULTY_CONFIG[t.difficulty] || DIFFICULTY_CONFIG.Medium;
 
           return (
             <motion.div
@@ -149,7 +154,7 @@ export function LiveTournamentsGrid() {
                   <Clock className="w-3.5 h-3.5 text-primary-light flex-shrink-0" />
                   <span className="text-xs text-muted-light whitespace-nowrap">Ends in</span>
                   <span className="text-sm font-bold text-white tabular-nums ml-auto whitespace-nowrap">
-                    {countdowns[i]}
+                    {countdowns[i] || "00:00:00"}
                   </span>
                 </div>
 
@@ -162,12 +167,11 @@ export function LiveTournamentsGrid() {
                   />
                   <StatBlock
                     icon={<Coins className="w-3.5 h-3.5 text-accent-orange" />}
-                    value={t.prizeDisplay}
+                    value={t.prizeDisplay || `${t.prizePool.toLocaleString()} TX`}
                     label="Prize Pool"
                   />
                   <StatBlock
                     icon={<Signal className="w-3.5 h-3.5" style={{ color: diffConfig.cssColor }} />}
-                    iconColor={diffConfig.color}
                     value={t.difficulty}
                     label="Difficulty"
                   />

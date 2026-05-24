@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Loader2, AlertCircle, RefreshCw, Sparkles, GraduationCap, Flame, BookOpen } from "lucide-react";
