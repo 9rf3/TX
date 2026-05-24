@@ -1,319 +1,105 @@
 "use client";
-/* eslint-disable react-hooks/set-state-in-effect */
-import React, { createContext, useContext, useState, useEffect } from "react";
-import {
-  TournamentCard,
-  LeaderboardUser,
-  RecentTournamentEntry,
-  RewardTier,
-  HeroStat,
-  liveTournaments as defaultLive,
-  upcomingTournaments as defaultUpcoming,
-  leaderboardData as defaultLeaderboard,
-  recentTournamentHistory as defaultHistory,
-  rewardTiers as defaultRewards,
-  heroStats as defaultStats,
-} from "@/components/tournaments/data";
+
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { createClient } from "@/utils/supabase/client";
+import type { Tournament, TournamentRegistration } from "@/lib/types";
 
 interface TournamentContextType {
-  tournaments: TournamentCard[];
-  leaderboard: LeaderboardUser[];
-  recentHistory: RecentTournamentEntry[];
-  rewardTiers: RewardTier[];
-  heroStats: HeroStat[];
-  
-  // Tournament CRUD
-  addTournament: (t: Omit<TournamentCard, "id">) => void;
-  updateTournament: (id: string, updates: Partial<TournamentCard>) => void;
-  deleteTournament: (id: string) => void;
-  
-  // Leaderboard CRUD
-  addLeaderboardUser: (u: LeaderboardUser) => void;
-  updateLeaderboardUser: (username: string, updates: Partial<LeaderboardUser>) => void;
-  deleteLeaderboardUser: (username: string) => void;
-  
-  // History CRUD
-  addHistoryEntry: (h: Omit<RecentTournamentEntry, "id">) => void;
-  deleteHistoryEntry: (id: number) => void;
-  
-  // Global actions
-  resetToDefaults: () => void;
-  isHydrated: boolean;
+  tournaments: Tournament[];
+  activeTournaments: Tournament[];
+  upcomingTournaments: Tournament[];
+  completedTournaments: Tournament[];
+  registrations: TournamentRegistration[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
 }
 
 const TournamentContext = createContext<TournamentContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEYS = {
-  TOURNAMENTS: "twokax_tournaments_list",
-  LEADERBOARD: "twokax_tournaments_leaderboard",
-  HISTORY: "twokax_tournaments_history",
-  REWARDS: "twokax_tournaments_rewards",
-  STATS: "twokax_tournaments_stats",
-};
-
 export function TournamentProvider({ children }: { children: React.ReactNode }) {
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [tournaments, setTournaments] = useState<TournamentCard[]>([]);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
-  const [recentHistory, setRecentHistory] = useState<RecentTournamentEntry[]>([]);
-  const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([]);
-  const [heroStats, setHeroStats] = useState<HeroStat[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const supabase = useRef(createClient());
+  const mounted = useRef(true);
 
-  // 1. Client hydration
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     try {
-      // Load tournaments (combined live & upcoming, or parse defaults)
-      const storedTournaments = localStorage.getItem(LOCAL_STORAGE_KEYS.TOURNAMENTS);
-      if (storedTournaments) {
-        setTournaments(JSON.parse(storedTournaments));
-      } else {
-        // Merge initial mock data into a unified array
-        const initialCombined: TournamentCard[] = [
-          ...defaultLive,
-          ...defaultUpcoming.map((item) => ({
-            id: `upcoming-${item.id}`,
-            status: "UPCOMING" as const,
-            title: item.title,
-            category: item.iconType === "html" ? "Web Development" : 
-                      item.iconType === "python" ? "Python Programming" : 
-                      item.iconType === "react" ? "React Frontend" : "Algorithms",
-            endTime: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-            participants: item.participants,
-            maxParticipants: item.participants + 100,
-            prizePool: parseInt(item.prize.replace(/[^0-9]/g, "")),
-            prizeDisplay: item.prize,
-            difficulty: (item.iconType === "algo" ? "Hard" : "Medium") as unknown as TournamentCard["difficulty"],
-            iconName: (item.iconType === "algo" ? "zap" : 
-                       item.iconType === "react" ? "zap" : "code") as unknown as TournamentCard["iconName"],
-            gradient: "linear-gradient(145deg, #0a101f 0%, #150f28 100%)",
-            overlayPattern: "",
-          })),
-        ];
-        setTournaments(initialCombined);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.TOURNAMENTS, JSON.stringify(initialCombined));
-      }
+      const { data: { user } } = await supabase.current.auth.getUser();
 
-      // Load leaderboard
-      const storedLeaderboard = localStorage.getItem(LOCAL_STORAGE_KEYS.LEADERBOARD);
-      if (storedLeaderboard) {
-        setLeaderboard(JSON.parse(storedLeaderboard));
-      } else {
-        setLeaderboard(defaultLeaderboard);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.LEADERBOARD, JSON.stringify(defaultLeaderboard));
-      }
+      const [tournamentsData, registrationsData] = await Promise.all([
+        supabase.current
+          .from("tournaments")
+          .select("*")
+          .order("start_at", { ascending: true }),
+        user
+          ? supabase.current
+              .from("tournament_registrations")
+              .select("*")
+              .eq("user_id", user.id)
+          : { data: [] },
+      ]);
 
-      // Load history
-      const storedHistory = localStorage.getItem(LOCAL_STORAGE_KEYS.HISTORY);
-      if (storedHistory) {
-        setRecentHistory(JSON.parse(storedHistory));
-      } else {
-        setRecentHistory(defaultHistory);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.HISTORY, JSON.stringify(defaultHistory));
-      }
+      if (!mounted.current) return;
 
-      // Load rewards
-      const storedRewards = localStorage.getItem(LOCAL_STORAGE_KEYS.REWARDS);
-      if (storedRewards) {
-        setRewardTiers(JSON.parse(storedRewards));
-      } else {
-        setRewardTiers(defaultRewards);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.REWARDS, JSON.stringify(defaultRewards));
-      }
+      if (tournamentsData.error) throw new Error(tournamentsData.error.message);
+      setTournaments(tournamentsData.data as Tournament[]);
 
-      // Load stats
-      const storedStats = localStorage.getItem(LOCAL_STORAGE_KEYS.STATS);
-      if (storedStats) {
-        setHeroStats(JSON.parse(storedStats));
-      } else {
-        setHeroStats(defaultStats);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.STATS, JSON.stringify(defaultStats));
+      if (registrationsData.data) {
+        setRegistrations(registrationsData.data as TournamentRegistration[]);
       }
     } catch (e) {
-      console.error("Failed to hydrate tournament localState", e);
+      if (mounted.current) {
+        setError(e instanceof Error ? e.message : "Failed to load tournaments");
+      }
     } finally {
-      setIsHydrated(true);
+      if (mounted.current) setIsLoading(false);
     }
   }, []);
 
-  // 2. Helper sync to localStorage
-  const saveToStorage = (key: string, data: unknown) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(key, JSON.stringify(data));
-    }
-  };
+  useEffect(() => {
+    mounted.current = true;
+    fetchData();
 
-  // 3. Tournament actions
-  const addTournament = (newT: Omit<TournamentCard, "id">) => {
-    const fresh: TournamentCard = {
-      ...newT,
-      // eslint-disable-next-line react-hooks/purity
-      id: `t-${Date.now()}`,
+    const channel = supabase.current
+      .channel("tournaments-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tournaments" },
+        () => { fetchData(); },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tournament_registrations" },
+        () => { fetchData(); },
+      )
+      .subscribe();
+
+    return () => {
+      mounted.current = false;
+      supabase.current.removeChannel(channel);
     };
-    const updated = [fresh, ...tournaments];
-    setTournaments(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.TOURNAMENTS, updated);
+  }, [fetchData]);
 
-    // Dynamic stats update: Total prize pool & players incrementation
-    updateCalculatedStats(updated);
-  };
-
-  const updateTournament = (id: string, updates: Partial<TournamentCard>) => {
-    const updated = tournaments.map((t) => (t.id === id ? { ...t, ...updates } : t));
-    setTournaments(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.TOURNAMENTS, updated);
-    updateCalculatedStats(updated);
-  };
-
-  const deleteTournament = (id: string) => {
-    const updated = tournaments.filter((t) => t.id !== id);
-    setTournaments(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.TOURNAMENTS, updated);
-    updateCalculatedStats(updated);
-  };
-
-  // 4. Leaderboard actions
-  const addLeaderboardUser = (u: LeaderboardUser) => {
-    const updated = [...leaderboard, u].sort((a, b) => b.xp - a.xp).map((item, idx) => ({
-      ...item,
-      rank: idx + 1,
-    }));
-    setLeaderboard(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.LEADERBOARD, updated);
-    updateCalculatedStats(tournaments);
-  };
-
-  const updateLeaderboardUser = (username: string, updates: Partial<LeaderboardUser>) => {
-    const updated = leaderboard
-      .map((u) => (u.username === username ? { ...u, ...updates } : u))
-      .sort((a, b) => b.xp - a.xp)
-      .map((item, idx) => ({
-        ...item,
-        rank: idx + 1,
-      }));
-    setLeaderboard(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.LEADERBOARD, updated);
-    updateCalculatedStats(tournaments);
-  };
-
-  const deleteLeaderboardUser = (username: string) => {
-    const updated = leaderboard
-      .filter((u) => u.username !== username)
-      .map((item, idx) => ({
-        ...item,
-        rank: idx + 1,
-      }));
-    setLeaderboard(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.LEADERBOARD, updated);
-    updateCalculatedStats(tournaments);
-  };
-
-  // 5. Match history actions
-  const addHistoryEntry = (entry: Omit<RecentTournamentEntry, "id">) => {
-    const fresh: RecentTournamentEntry = {
-      ...entry,
-      id: Date.now(),
-    };
-    const updated = [fresh, ...recentHistory].slice(0, 10);
-    setRecentHistory(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.HISTORY, updated);
-  };
-
-  const deleteHistoryEntry = (id: number) => {
-    const updated = recentHistory.filter((h) => h.id !== id);
-    setRecentHistory(updated);
-    saveToStorage(LOCAL_STORAGE_KEYS.HISTORY, updated);
-  };
-
-  // 6. Recalculate stats dynamically based on actual entries
-  const updateCalculatedStats = (tList: TournamentCard[]) => {
-    const totalPrize = tList.reduce((acc, curr) => acc + curr.prizePool, 0);
-    
-    const updatedStats = heroStats.map((stat) => {
-      if (stat.id === "players") {
-        const totalParticipants = tList.reduce((acc, curr) => acc + curr.participants, 0);
-        return {
-          ...stat,
-          value: (totalParticipants + 5000).toLocaleString(), // Offset with base global pool
-        };
-      }
-      if (stat.id === "prize") {
-        return {
-          ...stat,
-          value: totalPrize.toLocaleString(),
-        };
-      }
-      return stat;
-    });
-
-    setHeroStats(updatedStats);
-    saveToStorage(LOCAL_STORAGE_KEYS.STATS, updatedStats);
-  };
-
-  // 7. Global reset
-  const resetToDefaults = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.TOURNAMENTS);
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.LEADERBOARD);
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.HISTORY);
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.REWARDS);
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.STATS);
-    }
-    
-    // Clear in memory
-    const initialCombined: TournamentCard[] = [
-      ...defaultLive,
-      ...defaultUpcoming.map((item) => ({
-        id: `upcoming-${item.id}`,
-        status: "UPCOMING" as const,
-        title: item.title,
-        category: item.iconType === "html" ? "Web Development" : 
-                  item.iconType === "python" ? "Python Programming" : 
-                  item.iconType === "react" ? "React Frontend" : "Algorithms",
-        endTime: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-        participants: item.participants,
-        maxParticipants: item.participants + 100,
-        prizePool: parseInt(item.prize.replace(/[^0-9]/g, "")),
-        prizeDisplay: item.prize,
-        difficulty: (item.iconType === "algo" ? "Hard" : "Medium") as unknown as TournamentCard["difficulty"],
-        iconName: (item.iconType === "algo" ? "zap" : 
-                   item.iconType === "react" ? "zap" : "code") as unknown as TournamentCard["iconName"],
-        gradient: "linear-gradient(145deg, #0a101f 0%, #150f28 100%)",
-        overlayPattern: "",
-      })),
-    ];
-
-    setTournaments(initialCombined);
-    setLeaderboard(defaultLeaderboard);
-    setRecentHistory(defaultHistory);
-    setRewardTiers(defaultRewards);
-    setHeroStats(defaultStats);
-    
-    // Save defaults
-    saveToStorage(LOCAL_STORAGE_KEYS.TOURNAMENTS, initialCombined);
-    saveToStorage(LOCAL_STORAGE_KEYS.LEADERBOARD, defaultLeaderboard);
-    saveToStorage(LOCAL_STORAGE_KEYS.HISTORY, defaultHistory);
-    saveToStorage(LOCAL_STORAGE_KEYS.REWARDS, defaultRewards);
-    saveToStorage(LOCAL_STORAGE_KEYS.STATS, defaultStats);
-  };
+  const activeTournaments = tournaments.filter(
+    (t) => t.status === "registration_open" || t.status === "live",
+  );
+  const upcomingList = tournaments.filter((t) => t.status === "upcoming");
+  const completedList = tournaments.filter((t) => t.status === "completed");
 
   return (
     <TournamentContext.Provider
       value={{
         tournaments,
-        leaderboard,
-        recentHistory,
-        rewardTiers,
-        heroStats,
-        addTournament,
-        updateTournament,
-        deleteTournament,
-        addLeaderboardUser,
-        updateLeaderboardUser,
-        deleteLeaderboardUser,
-        addHistoryEntry,
-        deleteHistoryEntry,
-        resetToDefaults,
-        isHydrated,
+        activeTournaments,
+        upcomingTournaments: upcomingList,
+        completedTournaments: completedList,
+        registrations,
+        isLoading,
+        error,
+        refetch: fetchData,
       }}
     >
       {children}

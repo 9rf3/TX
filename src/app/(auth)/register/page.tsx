@@ -6,24 +6,40 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Mail, Lock, User, Zap, ArrowRight } from "lucide-react";
 import { signup } from "@/actions/auth";
+import { registerSchema } from "@/lib/validations/auth";
+import type { RegisterInput } from "@/lib/validations/auth";
 
 export default function RegisterPage() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState<RegisterInput>({ name: "", email: "", password: "", confirmPassword: "" });
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof RegisterInput, string>>>({});
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
+
+    const parsed = registerSchema.safeParse(form);
+    if (!parsed.success) {
+      const flat = parsed.error.flatten().fieldErrors;
+      setFieldErrors({
+        name: flat.name?.[0],
+        email: flat.email?.[0],
+        password: flat.password?.[0],
+        confirmPassword: flat.confirmPassword?.[0],
+      });
+      return;
+    }
+
     const formData = new FormData();
-    formData.append("name", name);
-    formData.append("email", email);
-    formData.append("password", password);
-    
+    formData.append("name", parsed.data.name);
+    formData.append("email", parsed.data.email);
+    formData.append("password", parsed.data.password);
+    formData.append("confirmPassword", parsed.data.confirmPassword);
+
     startTransition(async () => {
-      const result = await signup(formData);
+      const result = await signup(null, formData);
       if (result?.error) setError(result.error);
     });
   };
@@ -47,16 +63,56 @@ export default function RegisterPage() {
 
           <form className="space-y-4" onSubmit={handleRegister}>
             {error && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm text-center">{error}</div>}
-            <Input label="Full Name" name="name" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} icon={<User className="w-4 h-4" />} />
-            <Input label="Email" name="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} icon={<Mail className="w-4 h-4" />} />
-            <Input label="Password" name="password" type="password" placeholder="Min 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} icon={<Lock className="w-4 h-4" />} />
+
+            <Input
+              label="Full Name"
+              name="name"
+              placeholder="John Doe"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              icon={<User className="w-4 h-4" />}
+              error={fieldErrors.name}
+            />
+
+            <Input
+              label="Email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              icon={<Mail className="w-4 h-4" />}
+              error={fieldErrors.email}
+            />
+
+            <Input
+              label="Password"
+              name="password"
+              type="password"
+              placeholder="Min 8 characters"
+              value={form.password}
+              onChange={(e) => { setForm({ ...form, password: e.target.value }); setFieldErrors({ ...fieldErrors, password: undefined }); }}
+              icon={<Lock className="w-4 h-4" />}
+              error={fieldErrors.password}
+            />
+
+            <Input
+              label="Confirm Password"
+              name="confirmPassword"
+              type="password"
+              placeholder="Re-enter your password"
+              value={form.confirmPassword}
+              onChange={(e) => { setForm({ ...form, confirmPassword: e.target.value }); setFieldErrors({ ...fieldErrors, confirmPassword: undefined }); }}
+              icon={<Lock className="w-4 h-4" />}
+              error={fieldErrors.confirmPassword}
+            />
 
             <label className="flex items-start gap-2 text-sm text-muted-light cursor-pointer">
               <input type="checkbox" required className="w-4 h-4 mt-0.5 rounded bg-white/5 border-white/20 accent-primary" />
               I agree to the <span className="text-primary-light">Terms of Service</span> and <span className="text-primary-light">Privacy Policy</span>
             </label>
 
-            <Button className="w-full" size="lg" type="submit" disabled={isPending}>
+            <Button className="w-full" size="lg" type="submit" loading={isPending}>
               {isPending ? "Creating Account..." : "Create Account"} <ArrowRight className="w-4 h-4" />
             </Button>
           </form>

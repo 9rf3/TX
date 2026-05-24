@@ -4,11 +4,11 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TournamentProvider } from "@/components/providers/TournamentProvider";
 
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [layoutKey, setLayoutKey] = useState(0);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -21,8 +21,10 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar onMenuClick={() => setMobileOpen(true)} />
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
-          <ErrorBoundary key={layoutKey}>
-            {children}
+          <ErrorBoundary>
+            <TournamentProvider>
+              {children}
+            </TournamentProvider>
           </ErrorBoundary>
         </main>
       </div>

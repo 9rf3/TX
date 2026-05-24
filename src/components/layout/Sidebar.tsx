@@ -79,10 +79,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               )}
             >
               {isActive && (
-                <motion.div layoutId="sidebar-active"
-                  className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/20"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                />
+                <div className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/20" />
               )}
               <item.icon className={cn("w-5 h-5 shrink-0 relative z-10", isActive && "text-primary-light")} />
               {!collapsed && <span className="relative z-10 truncate">{item.label}</span>}
@@ -113,10 +110,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                   )}
                 >
                   {isActive && (
-                    <motion.div layoutId="sidebar-active-admin"
-                      className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/20"
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
+                    <div className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/20" />
                   )}
                   <item.icon className={cn("w-5 h-5 shrink-0 relative z-10", isActive && "text-primary-light")} />
                   {!collapsed && <span className="relative z-10 truncate">{item.label}</span>}

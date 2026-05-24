@@ -103,11 +103,12 @@ export interface Badge {
 
 export interface LeaderboardEntry {
   rank: number;
-  user: User;
-  xp: number;
-  level: number;
-  streak: number;
-  change: number; // position change
+  user_id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  score: number;
+  registered_at: string;
 }
 
 export interface ChatMessage {
@@ -443,6 +444,93 @@ export interface GitHubRepo {
   language: string;
   updated_at: string;
 }
+
+/* ================================================================== */
+/*  Tournaments & PvP Types                                            */
+/* ================================================================== */
+
+export type TournamentType = "solo" | "pvp" | "team";
+export type TournamentStatus = "upcoming" | "registration_open" | "live" | "completed";
+export type QuestionType = "multiple_choice" | "coding_challenge" | "written";
+export type RegistrationStatus = "registered" | "confirmed" | "disqualified";
+export type MatchStatus = "waiting" | "active" | "completed" | "cancelled";
+export type PvPCategory = "javascript" | "react" | "algorithms" | "python" | "html_css" | "general";
+
+export interface Tournament {
+  id: string;
+  title: string;
+  type: TournamentType;
+  status: TournamentStatus;
+  description: string | null;
+  rewards_config: TournamentRewardConfig;
+  max_participants: number;
+  registration_open_at: string | null;
+  registration_close_at: string | null;
+  start_at: string;
+  end_at: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TournamentRewardConfig {
+  xp_pool?: number;
+  coin_pool?: number;
+  distribution?: { rank: number; xp: number; coins: number; badge?: string }[];
+  badge_rewards?: { rank: number; badge_id: string }[];
+}
+
+export interface TournamentQuestion {
+  id: string;
+  tournament_id: string;
+  type: QuestionType;
+  data: Record<string, unknown>;
+  points: number;
+  order_index: number;
+}
+
+export interface TournamentRegistration {
+  id: string;
+  user_id: string;
+  tournament_id: string;
+  status: RegistrationStatus;
+  score: number;
+  rank: number | null;
+  metadata: Record<string, unknown>;
+  registered_at: string;
+}
+
+export interface PvPMatch {
+  id: string;
+  player_1_id: string;
+  player_2_id: string | null;
+  status: MatchStatus;
+  category: PvPCategory;
+  current_state_hash: string | null;
+  player_1_score: number;
+  player_2_score: number;
+  winner_id: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface PvPCategoryConfig {
+  id: PvPCategory;
+  label: string;
+  icon: string;
+  description: string;
+  color: string;
+}
+
+export const PVP_CATEGORIES: PvPCategoryConfig[] = [
+  { id: "javascript", label: "JavaScript", icon: "code", description: "JS fundamentals, async, closures", color: "#f7df1e" },
+  { id: "react", label: "React", icon: "zap", description: "Components, hooks, state management", color: "#61dafb" },
+  { id: "algorithms", label: "Algorithms", icon: "brain", description: "Data structures, sorting, DP", color: "#8b5cf6" },
+  { id: "python", label: "Python", icon: "code", description: "Python fundamentals & libraries", color: "#3776ab" },
+  { id: "html_css", label: "HTML/CSS", icon: "globe", description: "Markup, styling, responsive design", color: "#e34f26" },
+  { id: "general", label: "General Knowledge", icon: "book", description: "CS fundamentals & logic", color: "#10b981" },
+];
 
 export const PRESET_AVATARS = [
   { id: 'preset-1',  name: 'Phoenix',   url: '/avatars/preset-1.svg' },

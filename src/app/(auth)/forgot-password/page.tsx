@@ -1,14 +1,43 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Mail, Zap, ArrowLeft, CheckCircle } from "lucide-react";
+import { Mail, Zap, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { resetPasswordForEmail } from "@/actions/auth";
+import { forgotPasswordSchema } from "@/lib/validations/auth";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [fieldError, setFieldError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setFieldError("");
+
+    const parsed = forgotPasswordSchema.safeParse({ email });
+    if (!parsed.success) {
+      setFieldError(parsed.error.flatten().fieldErrors.email?.[0] ?? "Invalid email");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("email", parsed.data.email);
+
+    startTransition(async () => {
+      const result = await resetPasswordForEmail(null, formData);
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        setSent(true);
+      }
+    });
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
@@ -29,13 +58,35 @@ export default function ForgotPasswordPage() {
           </div>
 
           {!sent ? (
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setSent(true); }}>
-              <Input label="Email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} icon={<Mail className="w-4 h-4" />} />
-              <Button className="w-full" size="lg" type="submit">Send Reset Link</Button>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+                </div>
+              )}
+
+              <Input
+                label="Email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setFieldError(""); }}
+                icon={<Mail className="w-4 h-4" />}
+                error={fieldError}
+              />
+
+              <Button className="w-full" size="lg" type="submit" loading={isPending}>
+                {isPending ? "Sending..." : "Send Reset Link"}
+              </Button>
             </form>
           ) : (
             <div className="space-y-4">
-              <Button className="w-full" variant="ghost" onClick={() => setSent(false)}>Try another email</Button>
+              <p className="text-sm text-muted-light text-center">
+                Didn't receive the email? Check your spam folder or try again.
+              </p>
+              <Button className="w-full" variant="ghost" onClick={() => { setSent(false); setError(""); }}>
+                Try another email
+              </Button>
             </div>
           )}
 
