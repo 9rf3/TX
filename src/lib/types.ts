@@ -453,7 +453,7 @@ export type TournamentType = "solo" | "pvp" | "team";
 export type TournamentStatus = "upcoming" | "registration_open" | "live" | "completed";
 export type QuestionType = "multiple_choice" | "coding_challenge" | "written";
 export type RegistrationStatus = "registered" | "confirmed" | "disqualified";
-export type MatchStatus = "waiting" | "active" | "completed" | "cancelled";
+export type MatchStatus = "waiting" | "active" | "player_finished" | "all_finished" | "calculating_results" | "completed" | "cancelled";
 export type PvPCategory = "javascript" | "react" | "algorithms" | "python" | "html_css" | "general";
 
 export interface Tournament {
@@ -509,6 +509,15 @@ export interface PvPMatch {
   current_state_hash: string | null;
   player_1_score: number;
   player_2_score: number;
+  player_1_finished: boolean;
+  player_2_finished: boolean;
+  player_1_accuracy: number | null;
+  player_2_accuracy: number | null;
+  player_1_xp: number;
+  player_2_xp: number;
+  player_1_coins: number;
+  player_2_coins: number;
+  total_questions: number;
   winner_id: string | null;
   started_at: string | null;
   completed_at: string | null;

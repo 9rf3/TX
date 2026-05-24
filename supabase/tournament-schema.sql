@@ -34,9 +34,25 @@ exception
 end $$;
 
 do $$ begin
-  create type public.match_status as enum ('waiting', 'active', 'completed', 'cancelled');
+  create type public.match_status as enum ('waiting', 'active', 'player_finished', 'all_finished', 'calculating_results', 'completed', 'cancelled');
 exception
   when duplicate_object then null;
+end $$;
+
+-- Add new values if enum already exists but missing new values
+do $$ begin
+  alter type public.match_status add value if not exists 'player_finished';
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter type public.match_status add value if not exists 'all_finished';
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter type public.match_status add value if not exists 'calculating_results';
+exception when duplicate_object then null;
 end $$;
 
 -- ==========================================
@@ -135,6 +151,15 @@ create table if not exists public.pvp_matches (
   current_state_hash text,
   player_1_score integer default 0 not null,
   player_2_score integer default 0 not null,
+  player_1_finished boolean default false not null,
+  player_2_finished boolean default false not null,
+  player_1_accuracy numeric(5,2),
+  player_2_accuracy numeric(5,2),
+  player_1_xp integer default 0 not null,
+  player_2_xp integer default 0 not null,
+  player_1_coins integer default 0 not null,
+  player_2_coins integer default 0 not null,
+  total_questions integer default 5 not null,
   winner_id uuid references public.profiles(id),
   started_at timestamp with time zone,
   completed_at timestamp with time zone,
@@ -150,6 +175,52 @@ create index if not exists idx_pvp_matches_player2 on public.pvp_matches(player_
 create index if not exists idx_pvp_matches_status on public.pvp_matches(status);
 
 comment on table public.pvp_matches is 'Peer-vs-peer match records with anti-cheat state hashing and scoring';
+
+-- Migrate existing tables: add columns if missing
+do $$ begin
+  alter table public.pvp_matches add column player_1_finished boolean default false not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_2_finished boolean default false not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_1_accuracy numeric(5,2);
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_2_accuracy numeric(5,2);
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_1_xp integer default 0 not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_2_xp integer default 0 not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_1_coins integer default 0 not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column player_2_coins integer default 0 not null;
+exception when duplicate_column then null;
+end $$;
+
+do $$ begin
+  alter table public.pvp_matches add column total_questions integer default 5 not null;
+exception when duplicate_column then null;
+end $$;
 
 -- ==========================================
 -- ROW LEVEL SECURITY POLICIES
@@ -604,6 +675,262 @@ end;
 $$;
 
 comment on function public.find_or_create_pvp_match is 'Atomic find-or-create for PvP matchmaking. Uses FOR UPDATE SKIP LOCKED to prevent race conditions between concurrent players.';
+
+-- ==========================================
+-- SMART MATCH COMPLETION
+-- Called when a player finishes all questions or timer expires.
+-- If both players finished, auto-finalizes the match
+-- and awards XP/coins to both players.
+-- ==========================================
+
+create or replace function public.mark_player_finished(
+  p_match_id uuid,
+  p_user_id uuid,
+  p_accuracy numeric,
+  p_total_answered integer
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_match record;
+  v_both_finished boolean;
+  v_winner_id uuid;
+  v_p1_score integer;
+  v_p2_score integer;
+  v_p1_xp integer;
+  v_p2_xp integer;
+  v_p1_coins integer;
+  v_p2_coins integer;
+begin
+  -- Lock match row to prevent race conditions
+  select * into v_match
+  from public.pvp_matches
+  where id = p_match_id
+  for update;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'Match not found');
+  end if;
+
+  -- Only active or player_finished matches can be finished
+  if v_match.status not in ('active', 'player_finished') then
+    return jsonb_build_object('success', false, 'error', 'Match cannot be finished in current state', 'current_status', v_match.status);
+  end if;
+
+  -- Determine which player is finishing
+  if v_match.player_1_id = p_user_id then
+    if v_match.player_1_finished then
+      return jsonb_build_object('success', false, 'error', 'Player already finished');
+    end if;
+    update public.pvp_matches
+    set player_1_finished = true,
+        player_1_accuracy = p_accuracy
+    where id = p_match_id;
+  elsif v_match.player_2_id = p_user_id then
+    if v_match.player_2_finished then
+      return jsonb_build_object('success', false, 'error', 'Player already finished');
+    end if;
+    update public.pvp_matches
+    set player_2_finished = true,
+        player_2_accuracy = p_accuracy
+    where id = p_match_id;
+  else
+    return jsonb_build_object('success', false, 'error', 'User is not part of this match');
+  end if;
+
+  -- Re-read to check both finished
+  select * into v_match
+  from public.pvp_matches
+  where id = p_match_id;
+
+  v_both_finished := v_match.player_1_finished and v_match.player_2_finished;
+  v_p1_score := v_match.player_1_score;
+  v_p2_score := v_match.player_2_score;
+
+  if v_both_finished then
+    -- Both players finished — calculate winner and rewards
+    if v_p1_score > v_p2_score then
+      v_winner_id := v_match.player_1_id;
+    elsif v_p2_score > v_p1_score then
+      v_winner_id := v_match.player_2_id;
+    else
+      v_winner_id := null; -- tie
+    end if;
+
+    v_p1_xp := case when v_match.player_1_id = v_winner_id then 50 else 15 end;
+    v_p2_xp := case when v_match.player_2_id = v_winner_id then 50 else 15 end;
+    v_p1_coins := case when v_match.player_1_id = v_winner_id then 25 else 5 end;
+    v_p2_coins := case when v_match.player_2_id = v_winner_id then 25 else 5 end;
+
+    update public.pvp_matches
+    set status = 'completed',
+        winner_id = v_winner_id,
+        player_1_xp = v_p1_xp,
+        player_2_xp = v_p2_xp,
+        player_1_coins = v_p1_coins,
+        player_2_coins = v_p2_coins,
+        completed_at = now()
+    where id = p_match_id;
+
+    -- Award XP and coins
+    begin
+      perform public.award_xp_safe(v_match.player_1_id, v_p1_xp, 'pvp_' || case when v_match.player_1_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id));
+    exception when others then null; end;
+    begin
+      perform public.award_xp_safe(v_match.player_2_id, v_p2_xp, 'pvp_' || case when v_match.player_2_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id));
+    exception when others then null; end;
+    begin
+      perform public.award_coins_safe(v_match.player_1_id, v_p1_coins, 'pvp_' || case when v_match.player_1_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id));
+    exception when others then null; end;
+    begin
+      perform public.award_coins_safe(v_match.player_2_id, v_p2_coins, 'pvp_' || case when v_match.player_2_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id));
+    exception when others then null; end;
+
+    -- Update win count for winner
+    if v_winner_id is not null then
+      begin
+        update public.profiles
+        set pvp_won = coalesce(pvp_won, 0) + 1
+        where id = v_winner_id;
+      exception when others then null; end;
+    end if;
+
+    return jsonb_build_object(
+      'success', true,
+      'action', 'completed',
+      'match_id', p_match_id,
+      'winner_id', v_winner_id,
+      'player_1_score', v_p1_score,
+      'player_2_score', v_p2_score,
+      'player_1_xp', v_p1_xp,
+      'player_2_xp', v_p2_xp,
+      'player_1_coins', v_p1_coins,
+      'player_2_coins', v_p2_coins,
+      'player_1_accuracy', v_match.player_1_accuracy,
+      'player_2_accuracy', v_match.player_2_accuracy
+    );
+  else
+    -- Only one player finished — set status to player_finished
+    update public.pvp_matches
+    set status = 'player_finished'
+    where id = p_match_id;
+
+    return jsonb_build_object(
+      'success', true,
+      'action', 'player_finished',
+      'match_id', p_match_id,
+      'opponent_finished', false
+    );
+  end if;
+end;
+$$;
+
+comment on function public.mark_player_finished is 'Marks a player as finished. If both finished, auto-finalizes and awards rewards. Uses row lock to prevent race conditions.';
+
+-- ==========================================
+-- FINALIZE MATCH — force-end a match when
+-- timer expires or a player disconnects.
+-- Only callable when at least one player
+-- has finished; the unfinished player gets 0.
+-- ==========================================
+
+create or replace function public.finalize_match(
+  p_match_id uuid
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_match record;
+  v_winner_id uuid;
+  v_p1_xp integer;
+  v_p2_xp integer;
+  v_p1_coins integer;
+  v_p2_coins integer;
+begin
+  select * into v_match
+  from public.pvp_matches
+  where id = p_match_id
+  for update;
+
+  if not found then
+    return jsonb_build_object('success', false, 'error', 'Match not found');
+  end if;
+
+  -- Already completed or cancelled
+  if v_match.status in ('completed', 'cancelled') then
+    return jsonb_build_object('success', false, 'error', 'Match already ended');
+  end if;
+
+  -- At least one player must have finished
+  if not v_match.player_1_finished and not v_match.player_2_finished then
+    return jsonb_build_object('success', false, 'error', 'No player has finished yet');
+  end if;
+
+  -- Mark unfinished player as finished (with 0 accuracy)
+  if not v_match.player_1_finished then
+    update public.pvp_matches set player_1_finished = true, player_1_accuracy = 0 where id = p_match_id;
+  end if;
+  if not v_match.player_2_finished then
+    update public.pvp_matches set player_2_finished = true, player_2_accuracy = 0 where id = p_match_id;
+  end if;
+
+  -- Re-read
+  select * into v_match from public.pvp_matches where id = p_match_id;
+
+  -- Determine winner
+  if v_match.player_1_score > v_match.player_2_score then
+    v_winner_id := v_match.player_1_id;
+  elsif v_match.player_2_score > v_match.player_1_score then
+    v_winner_id := v_match.player_2_id;
+  else
+    v_winner_id := null;
+  end if;
+
+  v_p1_xp := case when v_match.player_1_id = v_winner_id then 50 else 15 end;
+  v_p2_xp := case when v_match.player_2_id = v_winner_id then 50 else 15 end;
+  v_p1_coins := case when v_match.player_1_id = v_winner_id then 25 else 5 end;
+  v_p2_coins := case when v_match.player_2_id = v_winner_id then 25 else 5 end;
+
+  update public.pvp_matches
+  set status = 'completed',
+      winner_id = v_winner_id,
+      player_1_xp = v_p1_xp,
+      player_2_xp = v_p2_xp,
+      player_1_coins = v_p1_coins,
+      player_2_coins = v_p2_coins,
+      completed_at = now()
+  where id = p_match_id;
+
+  -- Award XP/coins
+  begin perform public.award_xp_safe(v_match.player_1_id, v_p1_xp, 'pvp_' || case when v_match.player_1_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id)); exception when others then null; end;
+  begin perform public.award_xp_safe(v_match.player_2_id, v_p2_xp, 'pvp_' || case when v_match.player_2_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id)); exception when others then null; end;
+  begin perform public.award_coins_safe(v_match.player_1_id, v_p1_coins, 'pvp_' || case when v_match.player_1_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id)); exception when others then null; end;
+  begin perform public.award_coins_safe(v_match.player_2_id, v_p2_coins, 'pvp_' || case when v_match.player_2_id = v_winner_id then 'win' else 'loss' end, jsonb_build_object('match_id', p_match_id)); exception when others then null; end;
+
+  if v_winner_id is not null then
+    begin update public.profiles set pvp_won = coalesce(pvp_won, 0) + 1 where id = v_winner_id; exception when others then null; end;
+  end if;
+
+  return jsonb_build_object(
+    'success', true,
+    'action', 'completed',
+    'match_id', p_match_id,
+    'winner_id', v_winner_id,
+    'player_1_score', v_match.player_1_score,
+    'player_2_score', v_match.player_2_score,
+    'player_1_xp', v_p1_xp,
+    'player_2_xp', v_p2_xp,
+    'player_1_coins', v_p1_coins,
+    'player_2_coins', v_p2_coins,
+    'player_1_accuracy', v_match.player_1_accuracy,
+    'player_2_accuracy', v_match.player_2_accuracy
+  );
+end;
+$$;
+
+comment on function public.finalize_match is 'Force-ends a match when timer expires or a player disconnects. Marks unfinished player as finished (0 accuracy), calculates results, and awards rewards.';
 
 -- ==========================================
 -- REALTIME PUBLICATION
