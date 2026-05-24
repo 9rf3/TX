@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Trophy, Zap, Users, Coins, Crown, Timer, Award, Swords,
   Clock, Signal, ChevronRight, Calendar, Star, Medal, Sparkles,
-  AlertTriangle, Loader2, Check, X,
+  AlertTriangle, Loader2, Check, X, Play, Eye,
 } from "lucide-react";
 import { useTournaments } from "@/components/providers/TournamentProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -15,9 +15,11 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import {
   registerForTournament, cancelRegistration,
-  getTournamentLeaderboard, getRegistrationCount,
+  getTournamentLeaderboard, getRegistrationCount, getTournamentQuestions,
 } from "@/actions/tournaments";
-import type { Tournament, TournamentRegistration, LeaderboardEntry } from "@/lib/types";
+import { TournamentPlayModal } from "@/components/tournaments/TournamentPlayModal";
+import { PvPMatchModal } from "@/components/tournaments/PvPMatchModal";
+import type { Tournament, TournamentRegistration, LeaderboardEntry, PvPCategory } from "@/lib/types";
 
 /* ==================================================================== */
 /*  Countdown Hook                                                       */
@@ -92,10 +94,13 @@ function SectionHeader({ icon, title, subtitle, count }: { icon: React.ReactNode
 /*  Tournament Card                                                      */
 /* ==================================================================== */
 
-function TournamentCard({ tournament, registration, onAction }: {
+function TournamentCard({ tournament, registration, onRegister, onEnter, onViewResults, isLoading }: {
   tournament: Tournament;
   registration?: TournamentRegistration | null;
-  onAction: () => void;
+  onRegister: () => void;
+  onEnter: () => void;
+  onViewResults: () => void;
+  isLoading: boolean;
 }) {
   const endDate = new Date(tournament.end_at);
   const startDate = new Date(tournament.start_at);
@@ -171,19 +176,39 @@ function TournamentCard({ tournament, registration, onAction }: {
           </div>
         )}
 
-        <Button
-          variant={canEnter ? "primary" : canRegister ? "primary" : "outline"}
-          className="w-full"
-          glow={canEnter || canRegister}
-          onClick={onAction}
-          disabled={isPast && !isRegistered}
-        >
-          {canEnter && <><Zap className="w-4 h-4" /> Enter Tournament</>}
-          {canRegister && <><Check className="w-4 h-4" /> Register Now</>}
-          {canUnregister && <><X className="w-4 h-4" /> Cancel Registration</>}
-          {isPast && isRegistered && <><Trophy className="w-4 h-4" /> View Results</>}
-          {isPast && !isRegistered && <><Award className="w-4 h-4" /> Completed</>}
-        </Button>
+        {isLoading ? (
+          <Button variant="outline" className="w-full" disabled>
+            <Loader2 className="w-4 h-4 animate-spin" />
+          </Button>
+        ) : canEnter ? (
+          <Button variant="primary" className="w-full" glow onClick={onEnter}>
+            <Play className="w-4 h-4" /> Enter Tournament
+          </Button>
+        ) : canRegister ? (
+          <Button variant="primary" className="w-full" glow onClick={onRegister}>
+            <Check className="w-4 h-4" /> Register Now
+          </Button>
+        ) : canUnregister ? (
+          <Button variant="outline" className="w-full" onClick={onRegister}>
+            <X className="w-4 h-4" /> Cancel Registration
+          </Button>
+        ) : isPast && isRegistered ? (
+          <Button variant="primary" className="w-full" onClick={onViewResults}>
+            <Eye className="w-4 h-4" /> View Results
+          </Button>
+        ) : isPast ? (
+          <Button variant="outline" className="w-full" disabled>
+            <Award className="w-4 h-4" /> Completed
+          </Button>
+        ) : isRegistered ? (
+          <Button variant="outline" className="w-full" disabled>
+            <Check className="w-4 h-4" /> Registered
+          </Button>
+        ) : (
+          <Button variant="outline" className="w-full" disabled>
+            <Clock className="w-4 h-4" /> Waiting
+          </Button>
+        )}
       </div>
     </motion.div>
   );
@@ -195,7 +220,7 @@ function TournamentCard({ tournament, registration, onAction }: {
 
 function HeroBanner({ tournaments, onAction }: {
   tournaments: Tournament[];
-  onAction: (t: Tournament) => void;
+  onAction: (action: string, t: Tournament) => void;
 }) {
   const primaryTournament = tournaments.find((t) => t.status === "live") ?? tournaments.find((t) => t.status === "registration_open") ?? tournaments[0];
   const hasPrimary = !!primaryTournament;
@@ -242,8 +267,11 @@ function HeroBanner({ tournaments, onAction }: {
               </p>
               <p className="text-lg font-bold text-white leading-tight mb-1">{primaryTournament.title}</p>
               <p className="text-xs text-muted-light mb-3">{primaryTournament.description ?? ""}</p>
-              <Button variant="primary" size="sm" className="w-full" glow onClick={() => onAction(primaryTournament)}>
-                {primaryTournament.status === "live" ? <Zap className="w-4 h-4" /> : primaryTournament.status === "registration_open" ? <Check className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+              <Button
+                variant="primary" size="sm" className="w-full" glow
+                onClick={() => onAction(primaryTournament.status === "live" ? "enter" : primaryTournament.status === "registration_open" ? "register" : "view", primaryTournament)}
+              >
+                {primaryTournament.status === "live" ? <Play className="w-4 h-4" /> : primaryTournament.status === "registration_open" ? <Check className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
                 {primaryTournament.status === "live" ? "Enter Now" : primaryTournament.status === "registration_open" ? "Register" : "View Details"}
               </Button>
             </div>
@@ -361,7 +389,7 @@ function LeaderboardSection({ tournamentId }: { tournamentId?: string }) {
 function UpcomingTournamentsList({ tournaments, registrations, onAction }: {
   tournaments: Tournament[];
   registrations: TournamentRegistration[];
-  onAction: (t: Tournament) => void;
+  onAction: (action: string, t: Tournament) => void;
 }) {
   if (tournaments.length === 0) {
     return (
@@ -382,7 +410,6 @@ function UpcomingTournamentsList({ tournaments, registrations, onAction }: {
           <Calendar className="w-4 h-4 text-primary-light" />
           <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">Upcoming</h3>
         </div>
-        <button className="text-[11px] font-medium text-primary-light hover:text-primary transition-colors cursor-pointer">View All</button>
       </div>
 
       <div className="px-3 pb-3 space-y-1">
@@ -408,7 +435,7 @@ function UpcomingTournamentsList({ tournaments, registrations, onAction }: {
                   variant={reg ? "outline" : "primary"}
                   size="sm"
                   className="flex-shrink-0 text-[11px] px-3 py-1"
-                  onClick={() => onAction(t)}
+                  onClick={() => onAction("register", t)}
                 >
                   {reg ? "Registered" : "Join"}
                 </Button>
@@ -426,11 +453,17 @@ function UpcomingTournamentsList({ tournaments, registrations, onAction }: {
 /* ==================================================================== */
 
 export default function TournamentsPage() {
-  const { activeTournaments, upcomingTournaments, completedTournaments, registrations, isLoading } = useTournaments();
+  const { activeTournaments, upcomingTournaments, completedTournaments, registrations, isLoading, refetch } = useTournaments();
   const { user } = useAuth();
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({});
+
+  // Modal states
+  const [enteringTournament, setEnteringTournament] = useState<Tournament | null>(null);
+  const [pvPMatchCategory, setPvPMatchCategory] = useState<PvPCategory | null>(null);
+  const [viewingResults, setViewingResults] = useState<Tournament | null>(null);
+  const [viewingResultsData, setViewingResultsData] = useState<LeaderboardEntry[]>([]);
 
   useEffect(() => {
     const ids = activeTournaments.map((t) => t.id);
@@ -451,17 +484,37 @@ export default function TournamentsPage() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [activeTournaments]);
 
-  const handleAction = async (tournament: Tournament) => {
+  const handleAction = async (action: string, tournament: Tournament) => {
     if (!user) return;
-    setActionLoading(tournament.id);
 
+    if (action === "enter") {
+      if (tournament.status === "live") {
+        setEnteringTournament(tournament);
+      }
+      return;
+    }
+
+    if (action === "view") {
+      // View results of a completed tournament
+      if (tournament.status === "completed") {
+        setViewingResults(tournament);
+        try {
+          const leaders = await getTournamentLeaderboard(tournament.id);
+          setViewingResultsData(leaders);
+        } catch { /* ignore */ }
+      }
+      return;
+    }
+
+    setActionLoading(tournament.id);
     try {
       const existingReg = registrations.find((r) => r.tournament_id === tournament.id);
-      if (existingReg && tournament.status === "registration_open") {
+      if (action === "unregister" || (existingReg && tournament.status === "registration_open")) {
         await cancelRegistration(tournament.id);
-      } else if (tournament.status === "registration_open") {
+      } else if (action === "register" || tournament.status === "registration_open") {
         await registerForTournament(tournament.id);
       }
+      refetch();
     } catch (e) {
       console.error("Action failed:", e);
     } finally {
@@ -510,7 +563,14 @@ export default function TournamentsPage() {
                           <Loader2 className="w-6 h-6 text-primary-light animate-spin" />
                         </div>
                       )}
-                      <TournamentCard tournament={t} registration={reg} onAction={() => handleAction(t)} />
+                      <TournamentCard
+                        tournament={t}
+                        registration={reg}
+                        onRegister={() => handleAction("register", t)}
+                        onEnter={() => handleAction("enter", t)}
+                        onViewResults={() => handleAction("view", t)}
+                        isLoading={actionLoading === t.id}
+                      />
                     </div>
                   );
                 })}
@@ -519,7 +579,7 @@ export default function TournamentsPage() {
           )}
 
           {/* PvP Arena */}
-          <PvpArenaSection />
+          <PvpArenaSection onStartMatch={(cat) => setPvPMatchCategory(cat)} />
 
           {/* Completed Tournaments */}
           {completedTournaments.length > 0 && (
@@ -533,7 +593,17 @@ export default function TournamentsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {completedTournaments.slice(0, 3).map((t) => {
                   const reg = registrations.find((r) => r.tournament_id === t.id);
-                  return <TournamentCard key={t.id} tournament={t} registration={reg} onAction={() => handleAction(t)} />;
+                  return (
+                    <TournamentCard
+                      key={t.id}
+                      tournament={t}
+                      registration={reg}
+                      onRegister={() => {}}
+                      onEnter={() => {}}
+                      onViewResults={() => handleAction("view", t)}
+                      isLoading={false}
+                    />
+                  );
                 })}
               </div>
             </section>
@@ -553,6 +623,75 @@ export default function TournamentsPage() {
           <LeaderboardSection tournamentId={activeTournaments.find((t) => t.status === "live")?.id ?? activeTournaments.find((t) => t.status === "registration_open")?.id} />
         </aside>
       </div>
+
+      {/* Tournament Play Modal */}
+      {enteringTournament && user && (
+        <TournamentPlayModal
+          tournament={enteringTournament}
+          onClose={() => { setEnteringTournament(null); refetch(); }}
+        />
+      )}
+
+      {/* PvP Match Modal */}
+      {pvPMatchCategory && user && (
+        <PvPMatchModal
+          category={pvPMatchCategory}
+          onClose={() => { setPvPMatchCategory(null); }}
+          currentUserId={user.id}
+        />
+      )}
+
+      {/* View Results Modal */}
+      {viewingResults && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="relative w-full max-w-lg bg-[#0e1220] border border-white/10 rounded-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
+          >
+            <div className="h-1.5 w-full bg-gradient-to-r from-primary via-accent-pink to-secondary" />
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">Results — {viewingResults.title}</h3>
+              <button onClick={() => { setViewingResults(null); setViewingResultsData([]); }}
+                className="p-1 rounded-lg hover:bg-white/5 text-muted-light hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              {viewingResultsData.length === 0 ? (
+                <p className="text-sm text-muted-light text-center py-8">No results yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {viewingResultsData.map((entry, i) => (
+                    <div key={entry.user_id} className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl transition-colors",
+                      i === 0 ? "bg-amber-400/10 border border-amber-400/20" : "bg-white/[0.02] border border-white/5",
+                    )}>
+                      <span className={cn(
+                        "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
+                        i === 0 ? "bg-amber-400/20 text-amber-400" :
+                        i === 1 ? "bg-slate-300/20 text-slate-300" :
+                        i === 2 ? "bg-amber-700/20 text-amber-700" :
+                        "bg-white/5 text-muted",
+                      )}>
+                        {entry.rank}
+                      </span>
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent-pink flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                        {entry.username?.substring(0, 2).toUpperCase() || "U"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{entry.username || entry.full_name || "Unknown"}</p>
+                      </div>
+                      <span className="text-sm font-bold text-white tabular-nums">{entry.score.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -561,16 +700,15 @@ export default function TournamentsPage() {
 /*  PvP Arena Section                                                    */
 /* ==================================================================== */
 
-function PvpArenaSection() {
+function PvpArenaSection({ onStartMatch }: { onStartMatch: (cat: PvPCategory) => void }) {
   const { user } = useAuth();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [matchmaking, setMatchmaking] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<PvPCategory>("javascript");
 
   const categories = [
-    { id: "javascript", label: "JavaScript", icon: "JS", color: "#f7df1e", bg: "from-yellow-600/10 to-yellow-800/5" },
-    { id: "react", label: "React", icon: "⚛", color: "#61dafb", bg: "from-cyan-600/10 to-blue-800/5" },
-    { id: "algorithms", label: "Algorithms", icon: "Δ", color: "#8b5cf6", bg: "from-violet-600/10 to-purple-800/5" },
-    { id: "python", label: "Python", icon: "🐍", color: "#3776ab", bg: "from-blue-600/10 to-indigo-800/5" },
+    { id: "javascript" as PvPCategory, label: "JavaScript", icon: "JS", color: "#f7df1e", bg: "from-yellow-600/10 to-yellow-800/5" },
+    { id: "react" as PvPCategory, label: "React", icon: "⚛", color: "#61dafb", bg: "from-cyan-600/10 to-blue-800/5" },
+    { id: "algorithms" as PvPCategory, label: "Algorithms", icon: "Δ", color: "#8b5cf6", bg: "from-violet-600/10 to-purple-800/5" },
+    { id: "python" as PvPCategory, label: "Python", icon: "🐍", color: "#3776ab", bg: "from-blue-600/10 to-indigo-800/5" },
   ];
 
   return (
@@ -607,8 +745,14 @@ function PvpArenaSection() {
               </div>
             </div>
 
-            <Button variant="primary" className="w-full" glow disabled={matchmaking || !user}>
-              <Swords className="w-4 h-4" /> {matchmaking ? "Searching..." : "Fight Now"}
+            <Button
+              variant="primary"
+              className="w-full"
+              glow
+              disabled={!user}
+              onClick={() => onStartMatch(selectedCategory)}
+            >
+              <Swords className="w-4 h-4" /> Fight Now
             </Button>
           </div>
         </div>
@@ -634,10 +778,10 @@ function PvpArenaSection() {
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
                     className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all",
+                      "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all cursor-pointer",
                       selectedCategory === cat.id
                         ? "border-primary/40 bg-primary/10 text-primary-light"
-                        : "border-white/5 bg-white/[0.03] text-muted-light hover:border-white/10"
+                        : "border-white/5 bg-white/[0.03] text-muted-light hover:border-white/10",
                     )}
                   >
                     <span>{cat.icon}</span>
@@ -647,7 +791,13 @@ function PvpArenaSection() {
               </div>
             </div>
 
-            <Button variant="primary" className="w-full" glow disabled={!selectedCategory || !user}>
+            <Button
+              variant="primary"
+              className="w-full"
+              glow
+              disabled={!selectedCategory || !user}
+              onClick={() => onStartMatch(selectedCategory)}
+            >
               <Zap className="w-4 h-4" /> Quick Match
             </Button>
           </div>
@@ -662,7 +812,7 @@ function PvpArenaSection() {
           <span className="text-xs text-muted-light">Real-time 1v1 coding duels</span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-xs text-muted-light">Coming in Phase 4</span>
+          <Badge variant="primary" size="sm">LIVE</Badge>
         </div>
       </div>
     </motion.section>
