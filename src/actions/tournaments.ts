@@ -211,9 +211,11 @@ export async function enterTournament(tournamentId: string) {
 
   if (qError) throw new Error(qError.message);
 
+  if (!questions || questions.length === 0) {
+    throw new Error("This tournament has no questions yet");
+  }
+
   return {
-    tournament,
-    registration: reg,
     questions: questions as TournamentQuestion[],
   };
 }
@@ -225,7 +227,7 @@ export async function enterTournament(tournamentId: string) {
 export async function submitTournamentAnswer(
   tournamentId: string,
   questionId: string,
-  answer: string | string[] | Record<string, unknown>,
+  answer: string,
 ) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
@@ -233,19 +235,20 @@ export async function submitTournamentAnswer(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const answerJson = typeof answer === "string" ? answer : JSON.stringify(answer);
+  if (!answer || (typeof answer === "string" && answer.trim().length === 0)) {
+    return { success: true, correct: false, points: 0, basePoints: 0, timeBonus: 0 };
+  }
 
   // First try the SQL RPC (handles multiple_choice natively)
   const { data: rpcResult, error: rpcError } = await supabase.rpc("submit_tournament_answer_safe", {
     p_user_id: user.id,
     p_tournament_id: tournamentId,
     p_question_id: questionId,
-    p_answer: answerJson,
+    p_answer: answer,
   });
 
   if (rpcError) {
-    // Fallback: app-level evaluation
-    return handleFallbackEvaluation(supabase, user.id, tournamentId, questionId, answerJson);
+    return handleFallbackEvaluation(supabase, user.id, tournamentId, questionId, answer);
   }
 
   const result = rpcResult as {
@@ -258,9 +261,8 @@ export async function submitTournamentAnswer(
   };
 
   // If the RPC returned success but correct=false for non-MC types
-  // (the SQL evaluators are stubs), do app-level re-evaluation
   if (result.success && result.correct === false && result.points === 0) {
-    return handleFallbackEvaluation(supabase, user.id, tournamentId, questionId, answerJson);
+    return handleFallbackEvaluation(supabase, user.id, tournamentId, questionId, answer);
   }
 
   return {
@@ -364,44 +366,69 @@ export async function finishTournament(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Get final leaderboard position
-  const { data: leaderboard, error: lbError } = await supabase.rpc("get_tournament_leaderboard", {
-    p_tournament_id: tournamentId,
-    p_limit: 100,
-  });
+  // Get current score from registration first (safe fallback)
+  const { data: reg } = await supabase
+    .from("tournament_registrations")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("tournament_id", tournamentId)
+    .maybeSingle();
 
-  if (lbError) throw new Error(lbError.message);
+  if (!reg) throw new Error("No registration found");
 
-  const entry = (leaderboard as { rank: number; user_id: string; score: number }[]).find(
-    (e) => e.user_id === user.id,
-  );
+  // Get leaderboard position
+  let rank = 0;
+  let score = reg.score ?? 0;
+  try {
+    const { data: leaderboard } = await supabase.rpc("get_tournament_leaderboard", {
+      p_tournament_id: tournamentId,
+      p_limit: 100,
+    });
+    if (leaderboard) {
+      const entries = leaderboard as { rank: number; user_id: string; score: number }[];
+      const entry = entries.find((e) => e.user_id === user.id);
+      if (entry) {
+        rank = entry.rank;
+        score = entry.score;
+      }
+    }
+  } catch { /* fallback to registration data */ }
 
-  if (!entry) throw new Error("No registration found");
-
-  const rank = entry.rank;
-  const score = entry.score;
+  // If rank is still 0, calculate from position in leaderboard
+  if (rank === 0) {
+    rank = 1;
+    try {
+      const { data: allRegs } = await supabase
+        .from("tournament_registrations")
+        .select("id, score")
+        .eq("tournament_id", tournamentId)
+        .order("score", { ascending: false });
+      if (allRegs) {
+        const position = allRegs.findIndex((r) => r.id === reg.id);
+        rank = position >= 0 ? position + 1 : allRegs.length + 1;
+      }
+    } catch { /* keep rank 1 */ }
+  }
 
   // Get tournament for reward config
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("*")
-    .eq("id", tournamentId)
-    .single();
-
-  const rewardConfig = tournament?.rewards_config ?? {};
-  const distribution = (rewardConfig.distribution as { rank: number; xp: number; coins: number }[]) ?? [];
-
-  // Find matching reward tier
   let xpReward = Math.max(10, Math.floor(score * 0.5));
   let coinReward = Math.max(5, Math.floor(score * 0.2));
-
-  for (const tier of distribution) {
-    if (rank <= tier.rank) {
-      xpReward = tier.xp;
-      coinReward = tier.coins;
-      break;
+  try {
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("rewards_config")
+      .eq("id", tournamentId)
+      .single();
+    const rewardConfig = tournament?.rewards_config ?? {};
+    const distribution = (rewardConfig.distribution as { rank: number; xp: number; coins: number }[]) ?? [];
+    for (const tier of distribution) {
+      if (rank <= tier.rank) {
+        xpReward = tier.xp;
+        coinReward = tier.coins;
+        break;
+      }
     }
-  }
+  } catch { /* use defaults */ }
 
   // Award XP
   let leveledUp = false;
@@ -427,18 +454,27 @@ export async function finishTournament(tournamentId: string) {
 
   // Update profile stats (tournaments_won if rank 1)
   if (rank === 1) {
-    await supabase
-      .from("profiles")
-      .update({ tournaments_won: (await supabase.from("profiles").select("tournaments_won").eq("id", user.id).single()).data?.tournaments_won + 1 })
-      .eq("id", user.id);
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("tournaments_won")
+        .eq("id", user.id)
+        .single();
+      await supabase
+        .from("profiles")
+        .update({ tournaments_won: (profile?.tournaments_won ?? 0) + 1 })
+        .eq("id", user.id);
+    } catch { /* non-critical */ }
   }
 
   // Update registration rank
-  await supabase
-    .from("tournament_registrations")
-    .update({ rank })
-    .eq("user_id", user.id)
-    .eq("tournament_id", tournamentId);
+  try {
+    await supabase
+      .from("tournament_registrations")
+      .update({ rank })
+      .eq("user_id", user.id)
+      .eq("tournament_id", tournamentId);
+  } catch { /* non-critical */ }
 
   return {
     rank,

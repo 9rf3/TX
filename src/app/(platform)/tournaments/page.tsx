@@ -19,6 +19,7 @@ import {
 } from "@/actions/tournaments";
 import { TournamentPlayModal } from "@/components/tournaments/TournamentPlayModal";
 import { PvPMatchModal } from "@/components/tournaments/PvPMatchModal";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Tournament, TournamentRegistration, LeaderboardEntry, PvPCategory } from "@/lib/types";
 
 /* ==================================================================== */
@@ -626,19 +627,23 @@ export default function TournamentsPage() {
 
       {/* Tournament Play Modal */}
       {enteringTournament && user && (
-        <TournamentPlayModal
-          tournament={enteringTournament}
-          onClose={() => { setEnteringTournament(null); refetch(); }}
-        />
+        <ErrorBoundary onError={() => { setEnteringTournament(null); }}>
+          <TournamentPlayModal
+            tournament={enteringTournament}
+            onClose={() => { setEnteringTournament(null); refetch(); }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* PvP Match Modal */}
       {pvPMatchCategory && user && (
-        <PvPMatchModal
-          category={pvPMatchCategory}
-          onClose={() => { setPvPMatchCategory(null); }}
-          currentUserId={user.id}
-        />
+        <ErrorBoundary onError={() => { setPvPMatchCategory(null); }}>
+          <PvPMatchModal
+            category={pvPMatchCategory}
+            onClose={() => { setPvPMatchCategory(null); }}
+            currentUserId={user.id}
+          />
+        </ErrorBoundary>
       )}
 
       {/* View Results Modal */}

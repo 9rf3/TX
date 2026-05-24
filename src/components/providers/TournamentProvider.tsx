@@ -17,6 +17,8 @@ interface TournamentContextType {
 
 const TournamentContext = createContext<TournamentContextType | undefined>(undefined);
 
+const DEBOUNCE_MS = 2000;
+
 export function TournamentProvider({ children }: { children: React.ReactNode }) {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
@@ -24,6 +26,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState<string | null>(null);
   const supabase = useRef(createClient());
   const mounted = useRef(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -59,6 +62,14 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  // Debounced refetch to prevent realtime storm
+  const debouncedRefetch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (mounted.current) fetchData();
+    }, DEBOUNCE_MS);
+  }, [fetchData]);
+
   useEffect(() => {
     mounted.current = true;
     fetchData();
@@ -68,20 +79,21 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tournaments" },
-        () => { fetchData(); },
+        () => { debouncedRefetch(); },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tournament_registrations" },
-        () => { fetchData(); },
+        () => { debouncedRefetch(); },
       )
       .subscribe();
 
     return () => {
       mounted.current = false;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.current.removeChannel(channel);
     };
-  }, [fetchData]);
+  }, [fetchData, debouncedRefetch]);
 
   const activeTournaments = tournaments.filter(
     (t) => t.status === "registration_open" || t.status === "live",

@@ -306,7 +306,7 @@ export async function completePvPMatch(matchId: string) {
       .from("pvp_matches")
       .update({ status: "cancelled", completed_at: new Date().toISOString() })
       .eq("id", matchId);
-    return { status: "cancelled" };
+    return { status: "cancelled", winner: null, isWinner: false, p1Score: 0, p2Score: 0, xpReward: 0, coinReward: 0 };
   }
 
   const p1Score = match.player_1_score ?? 0;
