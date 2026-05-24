@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRequireRole, ROLES } from "@/lib/role-utils";
-import { useTournaments } from "@/components/providers/TournamentProvider";
+import { TournamentProvider, useTournaments } from "@/components/providers/TournamentProvider";
 import { GamePanel } from "@/components/ui/GamePanel";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +27,7 @@ import type { Tournament, TournamentQuestion, TournamentStatus, TournamentType, 
 /*  Admin Tournaments Page                                               */
 /* ==================================================================== */
 
-export default function AdminTournamentsPage() {
+function AdminTournamentsInner() {
   const { isAuthorized, isLoading: isRoleLoading } = useRequireRole([ROLES.ADMIN]);
   const { tournaments, isLoading, refetch } = useTournaments();
 
@@ -457,6 +457,14 @@ export default function AdminTournamentsPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function AdminTournamentsPage() {
+  return (
+    <TournamentProvider>
+      <AdminTournamentsInner />
+    </TournamentProvider>
   );
 }
 

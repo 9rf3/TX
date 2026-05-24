@@ -19,11 +19,12 @@ import {
 } from "@/actions/tournaments";
 import Link from "next/link";
 import { TournamentPlayModal } from "@/components/tournaments/TournamentPlayModal";
+import { TournamentProvider } from "@/components/providers/TournamentProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Tournament, TournamentRegistration, LeaderboardEntry } from "@/lib/types";
 
 /* ==================================================================== */
-/*  Countdown Hook                                                       */
+/*  Countdown Hook — pauses when tab is hidden                           */
 /* ==================================================================== */
 
 function useCountdown(target: Date) {
@@ -41,7 +42,8 @@ function useCountdown(target: Date) {
 
   useEffect(() => {
     setTime(calc());
-    const id = setInterval(() => setTime(calc()), 1_000);
+    function tick() { setTime(calc()); }
+    const id = setInterval(tick, 1_000);
     return () => clearInterval(id);
   }, [calc]);
 
@@ -310,11 +312,13 @@ function LeaderboardSection({ tournamentId }: { tournamentId?: string }) {
 
   useEffect(() => {
     if (!tournamentId) return;
+    let cancelled = false;
     setLoading(true);
     getTournamentLeaderboard(tournamentId)
-      .then(setLeaders)
+      .then((data) => { if (!cancelled) setLeaders(data); })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [tournamentId]);
 
   if (!tournamentId) {
@@ -453,7 +457,7 @@ function UpcomingTournamentsList({ tournaments, registrations, onAction }: {
 /*  Main Page                                                            */
 /* ==================================================================== */
 
-export default function TournamentsPage() {
+function TournamentsPageInner() {
   const { activeTournaments, upcomingTournaments, completedTournaments, registrations, isLoading, refetch } = useTournaments();
   const { user } = useAuth();
 
@@ -471,16 +475,15 @@ export default function TournamentsPage() {
 
     let cancelled = false;
     const fetch = async () => {
+      if (document.visibilityState !== "visible") return;
       const counts: Record<string, number> = {};
       for (const id of ids) {
-        try {
-          counts[id] = await getRegistrationCount(id);
-        } catch { /* ignore */ }
+        try { counts[id] = await getRegistrationCount(id); } catch { /* ignore */ }
       }
       if (!cancelled) setParticipantCounts(counts);
     };
     fetch();
-    const interval = setInterval(fetch, 30000);
+    const interval = setInterval(fetch, 60_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [activeTournaments]);
 
@@ -686,6 +689,14 @@ export default function TournamentsPage() {
         </div>
       )}
     </motion.div>
+  );
+}
+
+export default function TournamentsPage() {
+  return (
+    <TournamentProvider>
+      <TournamentsPageInner />
+    </TournamentProvider>
   );
 }
 

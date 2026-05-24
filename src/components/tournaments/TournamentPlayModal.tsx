@@ -98,9 +98,9 @@ export function TournamentPlayModal({
     }
   }, [tournament.id]);
 
-  // Timer countdown
+  // Timer countdown — stable interval, no timeLeft dep
   useEffect(() => {
-    if (phase !== "playing" || timeLeft <= 0 || finishRef.current) return;
+    if (phase !== "playing" || finishRef.current) return;
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -113,7 +113,7 @@ export function TournamentPlayModal({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [phase, timeLeft]);
+  }, [phase]);
 
   // Auto-finish when timer expires
   useEffect(() => {
@@ -163,15 +163,11 @@ export function TournamentPlayModal({
       setWrittenAnswer("");
 
       nextTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current) {
-          setCurrentIndex((i) => {
-            if (finishRef.current) return i;
-            if (i >= questions.length - 1) {
-              finishRef.current = true;
-              return i;
-            }
-            return i + 1;
-          });
+        if (!mountedRef.current || finishRef.current) return;
+        if (currentIndex >= questions.length - 1) {
+          handleFinish();
+        } else {
+          setCurrentIndex((i) => i + 1);
         }
       }, 800);
     } catch (e) {
@@ -179,18 +175,16 @@ export function TournamentPlayModal({
     } finally {
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [currentQuestion, submitting, selectedAnswer, writtenAnswer, tournament.id, questions.length]);
+  }, [currentQuestion, submitting, selectedAnswer, writtenAnswer, tournament.id, questions.length, currentIndex, handleFinish]);
 
   const handleNext = useCallback(() => {
     if (finishRef.current) return;
-    setCurrentIndex((i) => {
-      if (i >= questions.length - 1) {
-        setTimeout(() => handleFinish(), 100);
-        return i;
-      }
-      return i + 1;
-    });
-  }, [questions.length, handleFinish]);
+    if (currentIndex >= questions.length - 1) {
+      handleFinish();
+      return;
+    }
+    setCurrentIndex((i) => i + 1);
+  }, [questions.length, currentIndex, handleFinish]);
 
   const handleSkip = useCallback(() => {
     if (!currentQuestion || finishRef.current) return;

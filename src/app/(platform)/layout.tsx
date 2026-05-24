@@ -4,7 +4,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { TournamentProvider } from "@/components/providers/TournamentProvider";
 
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -22,9 +21,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
         <TopBar onMenuClick={() => setMobileOpen(true)} />
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
           <ErrorBoundary>
-            <TournamentProvider>
-              {children}
-            </TournamentProvider>
+            {children}
           </ErrorBoundary>
         </main>
       </div>

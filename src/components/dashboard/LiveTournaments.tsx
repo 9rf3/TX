@@ -1,15 +1,55 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Swords, Trophy, Clock, Users, Zap, Sparkles, ChevronRight } from "lucide-react";
-import { useTournaments } from "@/components/providers/TournamentProvider";
+import { Swords, Trophy, Clock, Users, Zap, Sparkles, ChevronRight, Loader2 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
+import type { Tournament } from "@/lib/types";
 
 export function LiveTournaments() {
   const router = useRouter();
-  const { activeTournaments, isLoading } = useTournaments();
-  const liveOnes = activeTournaments.filter((t) => t.status === "live").slice(0, 2);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+
+    const fetchLive = async () => {
+      try {
+        const { data } = await supabase
+          .from("tournaments")
+          .select("*")
+          .in("status", ["registration_open", "live"])
+          .order("start_at", { ascending: true });
+        if (!cancelled) {
+          setTournaments((data as Tournament[]) ?? []);
+        }
+      } catch { /* ignore */ }
+      finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchLive();
+
+    // Subscribe to tournament changes for live indicator
+    const channel = supabase
+      .channel("dashboard-tournaments")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, () => {
+        if (!cancelled) fetchLive();
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const liveOnes = tournaments.filter((t) => t.status === "live").slice(0, 2);
 
   return (
     <Card className="p-0 overflow-hidden">
@@ -34,7 +74,7 @@ export function LiveTournaments() {
 
         {isLoading ? (
           <div className="text-center py-6">
-            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+            <Loader2 className="w-5 h-5 text-muted-light animate-spin mx-auto" />
           </div>
         ) : liveOnes.length === 0 ? (
           <div className="text-center py-6">
