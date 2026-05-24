@@ -69,15 +69,9 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
-do $$ begin
-  create index idx_tournaments_status on public.tournaments(status);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournaments_status on public.tournaments(status);
 
-do $$ begin
-  create index idx_tournaments_start_at on public.tournaments(start_at);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournaments_start_at on public.tournaments(start_at);
 
 comment on table public.tournaments is 'Competitive tournament events with configurable lifecycle and rewards';
 comment on column public.tournaments.rewards_config is 'JSON structure defining prize pool distribution, badge rewards, and coin payouts per rank tier';
@@ -98,15 +92,9 @@ create table if not exists public.tournament_questions (
 
 alter table public.tournament_questions enable row level security;
 
-do $$ begin
-  create index idx_tournament_questions_tournament on public.tournament_questions(tournament_id);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournament_questions_tournament on public.tournament_questions(tournament_id);
 
-do $$ begin
-  create index idx_tournament_questions_order on public.tournament_questions(tournament_id, order_index);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournament_questions_order on public.tournament_questions(tournament_id, order_index);
 
 comment on table public.tournament_questions is 'Questions and scoring vectors for tournament challenges';
 comment on column public.tournament_questions.data is 'Question content (stem, options, code scaffold) — never sent to clients directly';
@@ -128,20 +116,11 @@ create table if not exists public.tournament_registrations (
 
 alter table public.tournament_registrations enable row level security;
 
-do $$ begin
-  create index idx_tournament_registrations_user on public.tournament_registrations(user_id);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournament_registrations_user on public.tournament_registrations(user_id);
 
-do $$ begin
-  create index idx_tournament_registrations_tournament on public.tournament_registrations(tournament_id);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournament_registrations_tournament on public.tournament_registrations(tournament_id);
 
-do $$ begin
-  create index idx_tournament_registrations_score on public.tournament_registrations(tournament_id, score desc);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_tournament_registrations_score on public.tournament_registrations(tournament_id, score desc);
 
 comment on table public.tournament_registrations is 'User registrations and final standings for tournaments';
 
@@ -164,20 +143,11 @@ create table if not exists public.pvp_matches (
 
 alter table public.pvp_matches enable row level security;
 
-do $$ begin
-  create index idx_pvp_matches_player1 on public.pvp_matches(player_1_id);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_pvp_matches_player1 on public.pvp_matches(player_1_id);
 
-do $$ begin
-  create index idx_pvp_matches_player2 on public.pvp_matches(player_2_id);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_pvp_matches_player2 on public.pvp_matches(player_2_id);
 
-do $$ begin
-  create index idx_pvp_matches_status on public.pvp_matches(status);
-exception when duplicate_object then null;
-end $$;
+create index if not exists idx_pvp_matches_status on public.pvp_matches(status);
 
 comment on table public.pvp_matches is 'Peer-vs-peer match records with anti-cheat state hashing and scoring';
 
@@ -569,6 +539,71 @@ begin
   return v_count;
 end;
 $$;
+
+-- ==========================================
+-- ATOMATIC PVP MATCHMAKING
+-- Uses FOR UPDATE SKIP LOCKED to prevent
+-- the race condition where both players
+-- create separate matches simultaneously.
+-- ==========================================
+
+create or replace function public.find_or_create_pvp_match(
+  p_user_id uuid,
+  p_category text
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_match record;
+begin
+  -- Atomically claim a waiting match using skip-locked
+  -- This ensures two concurrent calls never claim the same match
+  select id, player_1_id, player_2_id, status, category
+  into v_match
+  from public.pvp_matches
+  where status = 'waiting'
+    and player_2_id is null
+    and category = p_category
+    and player_1_id <> p_user_id
+  order by created_at asc
+  limit 1
+  for update skip locked;
+
+  if found then
+    update public.pvp_matches
+    set player_2_id = p_user_id,
+        status = 'active',
+        started_at = now(),
+        current_state_hash = gen_random_uuid()::text
+    where id = v_match.id;
+
+    return jsonb_build_object(
+      'action', 'joined',
+      'match_id', v_match.id,
+      'player_1_id', v_match.player_1_id,
+      'player_2_id', p_user_id,
+      'status', 'active'
+    );
+  end if;
+
+  -- No match available — create a new waiting match
+  insert into public.pvp_matches (player_1_id, category, status)
+  values (p_user_id, p_category, 'waiting')
+  returning id, player_1_id, player_2_id, status
+  into v_match;
+
+  return jsonb_build_object(
+    'action', 'created',
+    'match_id', v_match.id,
+    'player_1_id', v_match.player_1_id,
+    'player_2_id', v_match.player_2_id,
+    'status', 'waiting'
+  );
+end;
+$$;
+
+comment on function public.find_or_create_pvp_match is 'Atomic find-or-create for PvP matchmaking. Uses FOR UPDATE SKIP LOCKED to prevent race conditions between concurrent players.';
 
 -- ==========================================
 -- REALTIME PUBLICATION

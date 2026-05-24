@@ -5,19 +5,20 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Swords, Clock, Loader2, Zap, Trophy, Users, X, Search,
-  ArrowLeft, AlertTriangle, Coins, Check, ChevronRight,
-  BookOpen,
+  AlertTriangle, Coins, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { quickMatch, cancelMatch, getMatchState, getPvPStats, getUserMatches } from "@/actions/pvp";
+import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { PvPCategory, PvPMatch } from "@/lib/types";
 import { PVP_CATEGORIES } from "@/lib/types";
 
-type PagePhase = "idle" | "queueing" | "waiting" | "error" | "history";
+type PagePhase = "idle" | "queueing" | "waiting" | "error";
 
 export default function PvPPage() {
   const { user } = useAuth();
@@ -31,9 +32,13 @@ export default function PvPPage() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const currentMatchId = useRef<string | null>(null);
+  const navigating = useRef(false);
   const mountedRef = useRef(true);
 
+  // Load stats + recent matches on mount
   useEffect(() => {
     mountedRef.current = true;
     if (user) {
@@ -42,52 +47,104 @@ export default function PvPPage() {
     }
     return () => {
       mountedRef.current = false;
-      cleanupTimers();
+      cancelMatchmaking();
     };
   }, [user]);
 
-  const cleanupTimers = useCallback(() => {
+  const cancelMatchmaking = useCallback(() => {
+    // Only cancel if still waiting (the DB function has .eq("status","waiting"))
+    if (currentMatchId.current && !navigating.current) {
+      console.log(`[PVP] Cleanup: cancelling match ${currentMatchId.current.slice(0,8)}`);
+      cancelMatch(currentMatchId.current).catch(() => {});
+    }
+    currentMatchId.current = null;
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (channelRef.current && supabaseRef.current) {
+      supabaseRef.current.removeChannel(channelRef.current);
+      channelRef.current = null;
+      supabaseRef.current = null;
+    }
   }, []);
 
+  const navigateToMatch = useCallback((matchId: string) => {
+    navigating.current = true;
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (channelRef.current && supabaseRef.current) {
+      supabaseRef.current.removeChannel(channelRef.current);
+      channelRef.current = null;
+      supabaseRef.current = null;
+    }
+    currentMatchId.current = null;
+    router.push(`/pvp/match/${matchId}`);
+  }, [router]);
+
   const handleQuickMatch = useCallback(async () => {
-    if (!user || phase === "queueing") return;
+    if (!user || phase === "queueing" || navigating.current) return;
     setErrorMsg(null);
     setPhase("queueing");
     setMatchTimer(30);
 
     try {
+      console.log(`[PVP] Calling quickMatch for ${selectedCategory}`);
       const result = await quickMatch(selectedCategory);
       if (!mountedRef.current) return;
 
-      currentMatchId.current = result.match.id;
+      console.log(`[PVP] quickMatch returned match ${result.match.id.slice(0,8)} status=${result.match.status}`);
 
       if (result.match.status === "active") {
-        router.push(`/pvp/match/${result.match.id}`);
+        // Joined an existing match — go directly to match page
+        navigateToMatch(result.match.id);
         return;
       }
 
+      // Created a waiting match — subscribe and poll
+      currentMatchId.current = result.match.id;
       setPhase("waiting");
 
-      // Poll for opponent
+      // Subscribe to realtime updates for this match
+      const supabase = createClient();
+      supabaseRef.current = supabase;
+      const channel = supabase
+        .channel(`pvp-match-${result.match.id}`)
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "pvp_matches",
+          filter: `id=eq.${result.match.id}`,
+        }, (payload) => {
+          console.log(`[PVP] Realtime: match ${result.match.id.slice(0,8)} updated`, payload.new);
+          if (!mountedRef.current || navigating.current) return;
+          const newStatus = (payload.new as Record<string, unknown>).status;
+          const newP2 = (payload.new as Record<string, unknown>).player_2_id;
+          if (newStatus === "active" && newP2) {
+            console.log(`[PVP] Realtime: opponent joined! Navigating...`);
+            navigateToMatch(result.match.id);
+          }
+        })
+        .subscribe((status) => {
+          console.log(`[PVP] Realtime channel status: ${status}`);
+        });
+      channelRef.current = channel;
+
+      // Polling fallback (every 2s)
       pollRef.current = setInterval(async () => {
-        if (!mountedRef.current || !currentMatchId.current) return;
+        if (!mountedRef.current || !currentMatchId.current || navigating.current) return;
         try {
           const state = await getMatchState(currentMatchId.current);
-          if (!mountedRef.current) return;
           if (state.status === "active" && state.player2Id) {
-            cleanupTimers();
-            router.push(`/pvp/match/${currentMatchId.current}`);
+            console.log(`[PVP] Poll: opponent found! Navigating...`);
+            navigateToMatch(currentMatchId.current);
           }
         } catch { /* retry */ }
-      }, 1500);
+      }, 2000);
 
-      // Countdown timer
+      // Countdown timer (30s timeout)
       timerRef.current = setInterval(() => {
         setMatchTimer((t) => {
           if (t <= 1) {
-            cleanupTimers();
+            console.log(`[PVP] Timer expired, cancelling match`);
             handleCancel();
             return 0;
           }
@@ -97,31 +154,21 @@ export default function PvPPage() {
 
     } catch (e) {
       if (!mountedRef.current) return;
+      console.error(`[PVP] quickMatch failed:`, e);
       setErrorMsg(e instanceof Error ? e.message : "Failed to start match");
       setPhase("error");
-      cleanupTimers();
+      cancelMatchmaking();
     }
-  }, [user, selectedCategory, phase, router, cleanupTimers]);
+  }, [user, selectedCategory, phase, router, navigateToMatch, cancelMatchmaking]);
 
   const handleCancel = useCallback(async () => {
-    if (currentMatchId.current) {
-      try { await cancelMatch(currentMatchId.current); } catch { /* ignore */ }
-      currentMatchId.current = null;
-    }
-    cleanupTimers();
+    console.log(`[PVP] User cancelled matchmaking`);
+    cancelMatchmaking();
     if (mountedRef.current) {
       setPhase("idle");
       setMatchTimer(30);
     }
-  }, [cleanupTimers]);
-
-  useEffect(() => {
-    return () => {
-      if (currentMatchId.current) {
-        cancelMatch(currentMatchId.current).catch(() => {});
-      }
-    };
-  }, []);
+  }, [cancelMatchmaking]);
 
   const formatTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
@@ -220,11 +267,10 @@ export default function PvPPage() {
         </motion.div>
       )}
 
-      {/* Idle Phase - Arena Content */}
+      {/* Idle Phase */}
       {phase === "idle" && (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
           <div className="space-y-6">
-            {/* Quick Match Card */}
             <div className="group relative rounded-2xl border border-white/5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_25px_rgba(124,58,237,0.15)] hover:border-primary/20"
               style={{ background: "linear-gradient(145deg, #0c1230 0%, #0f0f2e 50%, #0d1435 100%)" }}>
               <div className="absolute inset-0 pointer-events-none"
@@ -262,9 +308,7 @@ export default function PvPPage() {
                 </div>
 
                 <Button
-                  variant="primary"
-                  className="w-full"
-                  glow
+                  variant="primary" className="w-full" glow
                   disabled={!user}
                   onClick={handleQuickMatch}
                 >
@@ -273,7 +317,6 @@ export default function PvPPage() {
               </div>
             </div>
 
-            {/* Category Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {PVP_CATEGORIES.filter((c) => c.id === selectedCategory).map((cat) => (
                 <div key={cat.id}
@@ -317,9 +360,7 @@ export default function PvPPage() {
             </div>
           </div>
 
-          {/* Sidebar */}
           <aside className="space-y-4">
-            {/* Stats Card */}
             <Card hover={false} className="p-0 overflow-hidden">
               <div className="flex items-center gap-2 px-5 pt-5 pb-3">
                 <Trophy className="w-4 h-4 text-primary-light" />
@@ -347,7 +388,6 @@ export default function PvPPage() {
               </div>
             </Card>
 
-            {/* Recent Matches */}
             <Card hover={false} className="p-0 overflow-hidden">
               <div className="flex items-center justify-between px-5 pt-5 pb-3">
                 <div className="flex items-center gap-2">

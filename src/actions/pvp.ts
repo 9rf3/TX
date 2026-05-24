@@ -38,7 +38,8 @@ export async function getUserMatches() {
 }
 
 /* ==================================================================== */
-/*  MATCH CREATION — find existing or create new                         */
+/*  MATCHMAKING — atomic find-or-create via DB RPC                       */
+/*  Uses FOR UPDATE SKIP LOCKED to prevent race conditions               */
 /* ==================================================================== */
 
 export async function quickMatch(category: PvPCategory) {
@@ -48,56 +49,88 @@ export async function quickMatch(category: PvPCategory) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  // Atomic: try to claim a waiting match
-  // Use a serializable-like approach: lock row by updating immediately
-  const { data: available } = await supabase
-    .from("pvp_matches")
-    .select("*")
-    .eq("status", "waiting")
-    .is("player_2_id", null)
-    .eq("category", category)
-    .neq("player_1_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1);
+  console.log(`[MATCHMAKING] User ${user.id.slice(0,8)} entering queue for ${category}`);
 
-  if (available && available.length > 0) {
-    const target = available[0];
-    const { data: joined, error } = await supabase
-      .from("pvp_matches")
-      .update({
-        player_2_id: user.id,
-        status: "active",
-        started_at: new Date().toISOString(),
-        current_state_hash: crypto.randomUUID(),
-      })
-      .eq("id", target.id)
-      .eq("status", "waiting")
-      .is("player_2_id", null)
-      .select()
-      .single();
+  // Retry loop to handle transient failures
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { data, error } = await supabase.rpc("find_or_create_pvp_match", {
+        p_user_id: user.id,
+        p_category: category,
+      });
 
-    if (!error && joined) {
-      const questions = getQuestionsForCategory(category, joined.id);
-      return { match: joined as PvPMatch, questions };
+      if (error) {
+        console.error(`[MATCHMAKING] RPC error (attempt ${attempt}):`, error.message);
+        if (attempt === MAX_RETRIES) throw new Error(error.message);
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+
+      const result = data as {
+        action: "joined" | "created";
+        match_id: string;
+        player_1_id: string;
+        player_2_id: string | null;
+        status: string;
+      };
+
+      console.log(`[MATCHMAKING] User ${user.id.slice(0,8)} → ${result.action} match ${result.match_id.slice(0,8)} (status: ${result.status})`);
+
+      if (result.action === "created") {
+        // Created a waiting match — return it
+        const questions = getQuestionsForCategory(category, result.match_id);
+        return {
+          match: {
+            id: result.match_id,
+            player_1_id: result.player_1_id,
+            player_2_id: null,
+            status: "waiting",
+            category,
+            current_state_hash: null,
+            player_1_score: 0,
+            player_2_score: 0,
+            winner_id: null,
+            started_at: null,
+            completed_at: null,
+            created_at: new Date().toISOString(),
+          } as PvPMatch,
+          questions,
+        };
+      }
+
+      if (result.action === "joined") {
+        // Successfully joined an existing match
+        const questions = getQuestionsForCategory(category, result.match_id);
+        return {
+          match: {
+            id: result.match_id,
+            player_1_id: result.player_1_id,
+            player_2_id: result.player_2_id ?? user.id,
+            status: "active",
+            category,
+            current_state_hash: crypto.randomUUID(),
+            player_1_score: 0,
+            player_2_score: 0,
+            winner_id: null,
+            started_at: new Date().toISOString(),
+            completed_at: null,
+            created_at: new Date().toISOString(),
+          } as PvPMatch,
+          questions,
+        };
+      }
+
+      // Unexpected result — retry
+      console.warn(`[MATCHMAKING] Unexpected result:`, result);
+    } catch (e) {
+      console.error(`[MATCHMAKING] Error (attempt ${attempt}):`, e);
+      if (attempt === MAX_RETRIES) throw e;
+      await new Promise((r) => setTimeout(r, 500));
     }
-    // Race lost — another player claimed it; fall through to create new
   }
 
-  // Create new waiting match
-  const { data: created, error: createErr } = await supabase
-    .from("pvp_matches")
-    .insert({
-      player_1_id: user.id,
-      category,
-      status: "waiting",
-    })
-    .select()
-    .single();
-
-  if (createErr) throw new Error(createErr.message);
-
-  const questions = getQuestionsForCategory(category, created.id);
-  return { match: created as PvPMatch, questions };
+  throw new Error("Matchmaking failed after retries");
 }
 
 /* ==================================================================== */
