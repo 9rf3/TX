@@ -368,6 +368,65 @@ export async function getPvPStats() {
 }
 
 /* ==================================================================== */
+/*  OPPONENT PROFILE                                                     */
+/* ==================================================================== */
+
+export interface OpponentProfile {
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  level: number;
+  rank_tier: string;
+}
+
+export async function getOpponentProfile(matchId: string): Promise<OpponentProfile> {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: match } = await supabase
+    .from("pvp_matches")
+    .select("*")
+    .eq("id", matchId)
+    .single();
+
+  if (!match) throw new Error("Match not found");
+
+  const opponentId = match.player_1_id === user.id ? match.player_2_id : match.player_1_id;
+  if (!opponentId) throw new Error("Opponent not yet joined");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, username, full_name, avatar_url, level")
+    .eq("id", opponentId)
+    .single();
+
+  if (!profile) throw new Error("Opponent profile not found");
+
+  const tiers = [
+    { min: 1, max: 10, name: "Bronze" },
+    { min: 11, max: 25, name: "Silver" },
+    { min: 26, max: 50, name: "Gold" },
+    { min: 51, max: 75, name: "Platinum" },
+    { min: 76, max: 99, name: "Diamond" },
+    { min: 100, max: 999, name: "Elite" },
+  ];
+  const rankTier = tiers.find((t) => (profile.level ?? 1) >= t.min && (profile.level ?? 1) <= t.max)?.name ?? "Bronze";
+
+  return {
+    id: profile.id,
+    username: profile.username ?? profile.full_name ?? "Unknown",
+    full_name: profile.full_name,
+    avatar_url: profile.avatar_url,
+    level: profile.level ?? 1,
+    rank_tier: rankTier,
+  };
+}
+
+/* ==================================================================== */
 /*  GET PVP QUESTIONS                                                    */
 /* ==================================================================== */
 

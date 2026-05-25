@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Swords, Clock, Loader2, Zap, Trophy, Users, X, Search,
-  AlertTriangle, Coins, BookOpen,
+  AlertTriangle, Coins, BookOpen, Sparkles, Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -19,6 +19,34 @@ import type { PvPCategory, PvPMatch } from "@/lib/types";
 import { PVP_CATEGORIES } from "@/lib/types";
 
 type PagePhase = "idle" | "queueing" | "waiting" | "error";
+
+function ArenaParticles() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {Array.from({ length: 15 }).map((_, i) => (
+        <motion.div
+          key={i}
+          className="absolute w-1 h-1 rounded-full"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            background: `radial-gradient(circle, rgba(139,92,246,${0.3 + Math.random() * 0.4}), transparent)`,
+          }}
+          animate={{
+            y: [0, -20 - Math.random() * 30],
+            opacity: [0, 0.6, 0],
+            scale: [0, 1.5, 0],
+          }}
+          transition={{
+            duration: 3 + Math.random() * 3,
+            repeat: Infinity,
+            delay: Math.random() * 4,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function PvPPage() {
   const { user } = useAuth();
@@ -38,7 +66,6 @@ export default function PvPPage() {
   const navigating = useRef(false);
   const mountedRef = useRef(true);
 
-  // Load stats + recent matches on mount
   useEffect(() => {
     mountedRef.current = true;
     if (user) {
@@ -52,9 +79,7 @@ export default function PvPPage() {
   }, [user]);
 
   const cancelMatchmaking = useCallback(() => {
-    // Only cancel if still waiting (the DB function has .eq("status","waiting"))
     if (currentMatchId.current && !navigating.current) {
-      console.log(`[PVP] Cleanup: cancelling match ${currentMatchId.current.slice(0,8)}`);
       cancelMatch(currentMatchId.current).catch(() => {});
     }
     currentMatchId.current = null;
@@ -87,23 +112,17 @@ export default function PvPPage() {
     setMatchTimer(30);
 
     try {
-      console.log(`[PVP] Calling quickMatch for ${selectedCategory}`);
       const result = await quickMatch(selectedCategory);
       if (!mountedRef.current) return;
 
-      console.log(`[PVP] quickMatch returned match ${result.match.id.slice(0,8)} status=${result.match.status}`);
-
       if (result.match.status === "active") {
-        // Joined an existing match — go directly to match page
         navigateToMatch(result.match.id);
         return;
       }
 
-      // Created a waiting match — subscribe and poll
       currentMatchId.current = result.match.id;
       setPhase("waiting");
 
-      // Subscribe to realtime updates for this match
       const supabase = createClient();
       supabaseRef.current = supabase;
       const channel = supabase
@@ -114,37 +133,29 @@ export default function PvPPage() {
           table: "pvp_matches",
           filter: `id=eq.${result.match.id}`,
         }, (payload) => {
-          console.log(`[PVP] Realtime: match ${result.match.id.slice(0,8)} updated`, payload.new);
           if (!mountedRef.current || navigating.current) return;
           const newStatus = (payload.new as Record<string, unknown>).status;
           const newP2 = (payload.new as Record<string, unknown>).player_2_id;
           if (newStatus === "active" && newP2) {
-            console.log(`[PVP] Realtime: opponent joined! Navigating...`);
             navigateToMatch(result.match.id);
           }
         })
-        .subscribe((status) => {
-          console.log(`[PVP] Realtime channel status: ${status}`);
-        });
+        .subscribe();
       channelRef.current = channel;
 
-      // Polling fallback (every 2s)
       pollRef.current = setInterval(async () => {
         if (!mountedRef.current || !currentMatchId.current || navigating.current) return;
         try {
           const state = await getMatchState(currentMatchId.current);
           if (state.status === "active" && state.player2Id) {
-            console.log(`[PVP] Poll: opponent found! Navigating...`);
             navigateToMatch(currentMatchId.current);
           }
         } catch { /* retry */ }
       }, 2000);
 
-      // Countdown timer (30s timeout)
       timerRef.current = setInterval(() => {
         setMatchTimer((t) => {
           if (t <= 1) {
-            console.log(`[PVP] Timer expired, cancelling match`);
             handleCancel();
             return 0;
           }
@@ -154,7 +165,6 @@ export default function PvPPage() {
 
     } catch (e) {
       if (!mountedRef.current) return;
-      console.error(`[PVP] quickMatch failed:`, e);
       setErrorMsg(e instanceof Error ? e.message : "Failed to start match");
       setPhase("error");
       cancelMatchmaking();
@@ -162,7 +172,6 @@ export default function PvPPage() {
   }, [user, selectedCategory, phase, router, navigateToMatch, cancelMatchmaking]);
 
   const handleCancel = useCallback(async () => {
-    console.log(`[PVP] User cancelled matchmaking`);
     cancelMatchmaking();
     if (mountedRef.current) {
       setPhase("idle");
@@ -176,13 +185,20 @@ export default function PvPPage() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="p-4 md:p-6 max-w-[1200px] mx-auto min-h-screen"
+      className="p-4 md:p-6 max-w-[1200px] mx-auto min-h-screen relative"
     >
-      <div className="flex items-center justify-between mb-6">
+      <ArenaParticles />
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-blue-600/20 border border-violet-500/20 flex items-center justify-center">
+          <motion.div
+            className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600/20 to-blue-600/20 border border-violet-500/20 flex items-center justify-center"
+            animate={{ boxShadow: ["0 0 0px rgba(139,92,246,0)", "0 0 20px rgba(139,92,246,0.2)", "0 0 0px rgba(139,92,246,0)"] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          >
             <Swords className="w-5 h-5 text-primary-light" />
-          </div>
+          </motion.div>
           <div>
             <h1 className="text-xl font-black text-white uppercase tracking-wide">PvP Arena</h1>
             <p className="text-xs text-muted-light">Real-time 1v1 coding duels</p>
@@ -212,19 +228,48 @@ export default function PvPPage() {
           <div className="relative z-10 p-8 text-center">
             {phase === "queueing" ? (
               <>
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/30 to-blue-600/30 flex items-center justify-center mx-auto mb-4 border-2 border-primary/30">
-                  <Loader2 className="w-8 h-8 text-primary-light animate-spin" />
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-blue-600/20 flex items-center justify-center mx-auto mb-4 border-2 border-primary/30">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Loader2 className="w-8 h-8 text-primary-light" />
+                  </motion.div>
                 </div>
-                <h2 className="text-xl font-bold text-white mb-1">Finding Match...</h2>
+                <motion.h2
+                  className="text-2xl font-black text-white mb-1"
+                  animate={{ opacity: [1, 0.6, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                >
+                  Finding Match...
+                </motion.h2>
                 <p className="text-muted-light text-sm capitalize">{selectedCategory} · Quick Match</p>
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(139,92,246,${0.8 - i * 0.2}), rgba(6,182,212,${0.8 - i * 0.2}))`,
+                      }}
+                      animate={{ y: [0, -8, 0], opacity: [0.3, 1, 0.3] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
+                    />
+                  ))}
+                </div>
               </>
             ) : (
               <>
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/30 to-blue-600/30 flex items-center justify-center mx-auto mb-4 border-2 border-primary/30 animate-pulse">
+                <motion.div
+                  className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-blue-600/20 flex items-center justify-center mx-auto mb-4 border-2 border-primary/30"
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
                   <Search className="w-8 h-8 text-primary-light" />
-                </div>
-                <h2 className="text-xl font-bold text-white mb-1">Waiting for Opponent</h2>
-                <p className="text-muted-light text-sm mb-2 capitalize">{selectedCategory} · Quick Match</p>
+                </motion.div>
+                <h2 className="text-2xl font-black text-white mb-1">Waiting for Opponent</h2>
+                <p className="text-muted-light text-sm mb-3 capitalize">{selectedCategory} · Quick Match</p>
+
                 <div className={cn(
                   "inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold tabular-nums mb-4",
                   matchTimer < 10 ? "bg-red-500/20 text-red-400" : "bg-white/5 text-white"
@@ -232,11 +277,22 @@ export default function PvPPage() {
                   <Clock className="w-4 h-4" />
                   {formatTime(matchTimer)}
                 </div>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                  <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="w-2 h-2 rounded-full bg-primary-light animate-bounce" style={{ animationDelay: "300ms" }} />
+
+                <div className="flex items-center justify-center gap-3 mb-4">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-3 h-3 rounded-full"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(139,92,246,${0.8 - i * 0.2}), rgba(6,182,212,${0.8 - i * 0.2}))`,
+                        boxShadow: `0 0 10px rgba(139,92,246,${0.5 - i * 0.15})`,
+                      }}
+                      animate={{ y: [0, -10, 0], opacity: [0.4, 1, 0.4] }}
+                      transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                    />
+                  ))}
                 </div>
+
                 <Button variant="ghost" onClick={handleCancel}>
                   <X className="w-4 h-4" /> Cancel
                 </Button>
@@ -246,7 +302,7 @@ export default function PvPPage() {
         </motion.div>
       )}
 
-      {/* Error Phase */}
+      {/* Error */}
       {phase === "error" && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -267,20 +323,28 @@ export default function PvPPage() {
         </motion.div>
       )}
 
-      {/* Idle Phase */}
+      {/* Idle */}
       {phase === "idle" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 relative z-10">
           <div className="space-y-6">
-            <div className="group relative rounded-2xl border border-white/5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_25px_rgba(124,58,237,0.15)] hover:border-primary/20"
-              style={{ background: "linear-gradient(145deg, #0c1230 0%, #0f0f2e 50%, #0d1435 100%)" }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="group relative rounded-2xl border border-white/5 overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(124,58,237,0.15)] hover:border-primary/20"
+              style={{ background: "linear-gradient(145deg, #0c1230 0%, #0f0f2e 50%, #0d1435 100%)" }}
+            >
               <div className="absolute inset-0 pointer-events-none"
                 style={{ background: "radial-gradient(circle at 70% 30%, rgba(139,92,246,0.1) 0%, transparent 50%)" }}
               />
               <div className="relative z-10 p-6">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-blue-600/20 border border-violet-500/20 flex items-center justify-center">
+                  <motion.div
+                    className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-blue-600/20 border border-violet-500/20 flex items-center justify-center"
+                    animate={{ boxShadow: ["0 0 0px rgba(139,92,246,0)", "0 0 15px rgba(139,92,246,0.15)", "0 0 0px rgba(139,92,246,0)"] }}
+                    transition={{ duration: 3, repeat: Infinity }}
+                  >
                     <Swords className="w-5 h-5 text-primary-light" />
-                  </div>
+                  </motion.div>
                   <Badge variant="primary" size="sm">Quick Match</Badge>
                 </div>
                 <h3 className="text-xl font-extrabold text-white mb-1.5 tracking-tight">1V1 ARENA</h3>
@@ -290,19 +354,21 @@ export default function PvPPage() {
                   <p className="text-xs text-muted-light mb-2 uppercase tracking-wider">Select Category</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {PVP_CATEGORIES.slice(0, 6).map((cat) => (
-                      <button
+                      <motion.button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         className={cn(
                           "flex items-center gap-2 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
                           selectedCategory === cat.id
-                            ? "border-primary/40 bg-primary/10 text-primary-light"
+                            ? "border-primary/40 bg-primary/10 text-primary-light shadow-[0_0_12px_rgba(139,92,246,0.1)]"
                             : "border-white/5 bg-white/[0.03] text-muted-light hover:border-white/10 hover:text-white",
                         )}
                       >
-                        <span>{cat.icon === "code" ? "JS" : cat.icon === "zap" ? "⚛" : cat.icon === "brain" ? "Δ" : cat.icon === "globe" ? "🌐" : cat.icon === "book" ? "📖" : cat.icon}</span>
+                        <span className="text-base">{cat.icon === "code" ? "JS" : cat.icon === "zap" ? "⚛" : cat.icon === "brain" ? "Δ" : cat.icon === "globe" ? "🌐" : cat.icon === "book" ? "📖" : cat.icon}</span>
                         <span className="truncate">{cat.label}</span>
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -315,11 +381,14 @@ export default function PvPPage() {
                   <Zap className="w-4 h-4" /> Quick Match
                 </Button>
               </div>
-            </div>
+            </motion.div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {PVP_CATEGORIES.filter((c) => c.id === selectedCategory).map((cat) => (
-                <div key={cat.id}
+                <motion.div
+                  key={cat.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
                   className="rounded-xl border border-white/5 p-4 bg-white/[0.02]"
                 >
                   <div className="flex items-center gap-3 mb-3">
@@ -338,10 +407,15 @@ export default function PvPPage() {
                     <span>·</span>
                     <span>3 min timer</span>
                   </div>
-                </div>
+                </motion.div>
               ))}
 
-              <div className="rounded-xl border border-white/5 p-4 bg-white/[0.02]">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="rounded-xl border border-white/5 p-4 bg-white/[0.02]"
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
                     <Trophy className="w-5 h-5 text-amber-400" />
@@ -356,7 +430,7 @@ export default function PvPPage() {
                   <p><span className="text-amber-400 font-semibold">+25 TX</span> per win</p>
                   <p><span className="text-muted">+15 XP</span> / <span className="text-muted">+5 TX</span> participation</p>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
 
@@ -371,18 +445,33 @@ export default function PvPPage() {
                   <p className="text-sm text-muted-light">No matches played yet.</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="text-center">
+                    <motion.div
+                      className="text-center p-2 rounded-lg bg-white/[0.02]"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.1 }}
+                    >
                       <p className="text-lg font-black text-white">{stats.total}</p>
                       <p className="text-[10px] text-muted uppercase">Total</p>
-                    </div>
-                    <div className="text-center">
+                    </motion.div>
+                    <motion.div
+                      className="text-center p-2 rounded-lg bg-white/[0.02]"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.2 }}
+                    >
                       <p className="text-lg font-black text-accent-green">{stats.wins}</p>
                       <p className="text-[10px] text-muted uppercase">Wins</p>
-                    </div>
-                    <div className="text-center">
+                    </motion.div>
+                    <motion.div
+                      className="text-center p-2 rounded-lg bg-white/[0.02]"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.3 }}
+                    >
                       <p className="text-lg font-black text-red-400">{stats.losses}</p>
                       <p className="text-[10px] text-muted uppercase">Losses</p>
-                    </div>
+                    </motion.div>
                   </div>
                 )}
               </div>
@@ -391,7 +480,7 @@ export default function PvPPage() {
             <Card hover={false} className="p-0 overflow-hidden">
               <div className="flex items-center justify-between px-5 pt-5 pb-3">
                 <div className="flex items-center gap-2">
-                  <Swords className="w-4 h-4 text-muted" />
+                  <Activity className="w-4 h-4 text-muted" />
                   <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">Recent</h3>
                 </div>
               </div>
@@ -401,8 +490,10 @@ export default function PvPPage() {
                 ) : (
                   <div className="space-y-1">
                     {recentMatches.slice(0, 3).map((m) => (
-                      <button key={m.id}
+                      <motion.button
+                        key={m.id}
                         onClick={() => router.push(`/pvp/match/${m.id}`)}
+                        whileHover={{ x: 3 }}
                         className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/[0.03] transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
@@ -418,7 +509,7 @@ export default function PvPPage() {
                         )}>
                           {m.status === "completed" ? `${m.player_1_score} - ${m.player_2_score}` : m.status}
                         </span>
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 )}

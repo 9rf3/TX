@@ -123,6 +123,116 @@
   to { stroke-dashoffset: -100; }
 }
 
+/* ─── PvP Battle Animations ─── */
+
+@keyframes vs-pulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(139,92,246,0.6), 0 0 40px rgba(139,92,246,0.3), 0 0 80px rgba(139,92,246,0.15); }
+  50% { text-shadow: 0 0 40px rgba(139,92,246,0.9), 0 0 80px rgba(139,92,246,0.5), 0 0 120px rgba(139,92,246,0.25); }
+}
+
+@keyframes vs-zoom-in {
+  0% { transform: scale(3); opacity: 0; }
+  50% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+@keyframes combo-flash {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(60px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes xp-float-up {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(1.3); }
+}
+
+@keyframes particle-burst {
+  0% { transform: scale(0) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1.5) rotate(180deg); opacity: 0; }
+}
+
+@keyframes crown-glow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(255,215,0,0.4)) drop-shadow(0 0 20px rgba(255,215,0,0.2)); }
+  50% { filter: drop-shadow(0 0 20px rgba(255,215,0,0.7)) drop-shadow(0 0 40px rgba(255,215,0,0.4)); }
+}
+
+@keyframes progress-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(139,92,246,0.3); }
+  50% { box-shadow: 0 0 16px rgba(139,92,246,0.6); }
+}
+
+@keyframes bg-scroll {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes glitch {
+  0% { clip-path: inset(40% 0 61% 0); transform: translate(-2px, 2px); }
+  20% { clip-path: inset(92% 0 1% 0); transform: translate(1px, -3px); }
+  40% { clip-path: inset(43% 0 1% 0); transform: translate(-1px, 3px); }
+  60% { clip-path: inset(25% 0 58% 0); transform: translate(3px, 1px); }
+  80% { clip-path: inset(54% 0 7% 0); transform: translate(-3px, -2px); }
+  100% { clip-path: inset(58% 0 43% 0); transform: translate(2px, 1px); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(0.6); opacity: 0.3; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ring-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes trophy-bounce {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  25% { transform: translateY(-8px) rotate(0deg); }
+  50% { transform: translateY(0) rotate(3deg); }
+  75% { transform: translateY(-5px) rotate(0deg); }
+}
+
+.animate-vs-pulse { animation: vs-pulse 2s ease-in-out infinite; }
+.animate-vs-zoom-in { animation: vs-zoom-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-score-pop { animation: score-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-combo-flash { animation: combo-flash 0.6s ease-in-out infinite; }
+.animate-shake { animation: shake 0.4s ease-in-out; }
+.animate-slide-in-left { animation: slide-in-left 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-slide-in-right { animation: slide-in-right 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-xp-float-up { animation: xp-float-up 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-particle-burst { animation: particle-burst 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-crown-glow { animation: crown-glow 2s ease-in-out infinite; }
+.animate-progress-glow { animation: progress-glow 2s ease-in-out infinite; }
+.animate-bg-scroll { animation: bg-scroll 8s ease infinite; background-size: 200% 200%; }
+.animate-dot-pulse { animation: dot-pulse 1.2s ease-in-out infinite; }
+.animate-ring-rotate { animation: ring-rotate 3s linear infinite; }
+.animate-trophy-bounce { animation: trophy-bounce 2s ease-in-out infinite; }
+
 @keyframes particle-float {
   0%, 100% { transform: translateY(0) translateX(0); opacity: 0; }
   25% { opacity: 0.8; }
