@@ -1,0 +1,156 @@
+// TWOKAX Prisma Schema Reference
+// This file documents the data models for the lesson system.
+// The actual database uses Supabase PostgreSQL (see supabase.sql & migrations/).
+// To use Prisma: install @prisma/client, run `prisma generate`, then import.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(uuid())
+  username        String   @unique
+  avatarUrl       String?
+  totalXp         Int      @default(0)
+  txCoins         Int      @default(0)
+  currentStreak   Int      @default(0)
+  longestStreak   Int      @default(0)
+  level           Int      @default(1)
+
+  courseProgress  UserCourseProgress[]
+  lessonProgress  UserLessonProgress[]
+  quizAttempts    QuizAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Course ──────────────────────────────────────────────────────────────────
+
+model Course {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  totalLessons Int      @default(0)
+  totalHours   Float    @default(0)
+  category     String?
+  thumbnail    String?
+  gradient     String?
+
+  modules      CourseModule[]
+  userProgress UserCourseProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Course Module (Lesson) ──────────────────────────────────────────────────
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId     String
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonNumber String?  // e.g. "1.3"
+  title       String
+  description String?
+  videoUrl    String?
+  videoType   String   @default("none") // upload | external | none
+  duration    Int      @default(0)      // seconds
+  orderIndex  Int      @default(0)
+
+  userProgress UserLessonProgress[]
+  quiz         LessonQuiz?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── User Course Progress ───────────────────────────────────────────────────
+
+model UserCourseProgress {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId          String
+  course            Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  completedLessons  Int      @default(0)
+  totalTimeSeconds  Int      @default(0)
+  progressPercent   Float    @default(0)
+  xpEarned          Int      @default(0)
+
+  @@unique([userId, courseId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── User Lesson Progress ───────────────────────────────────────────────────
+
+model UserLessonProgress {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId       String
+  module         CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  watchedSeconds Int      @default(0)
+  isCompleted    Boolean  @default(false)
+  completedAt    DateTime?
+
+  @@unique([userId, moduleId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Lesson Quiz ─────────────────────────────────────────────────────────────
+
+model LessonQuiz {
+  id       String   @id @default(uuid())
+  moduleId String   @unique
+  module   CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title    String   @default("Lesson Quiz")
+
+  questions   LessonQuestion[]
+  quizAttempts QuizAttempt[]
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Lesson Question ─────────────────────────────────────────────────────────
+
+model LessonQuestion {
+  id            String   @id @default(uuid())
+  quizId        String
+  quiz          LessonQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questionText  String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctOption String   // "A" | "B" | "C" | "D"
+  orderIndex    Int      @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+// ─── Quiz Attempt ────────────────────────────────────────────────────────────
+
+model QuizAttempt {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId          String
+  quiz            LessonQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  correctAnswers  Int      @default(0)
+  totalQuestions  Int      @default(0)
+  scorePercent    Float    @default(0)
+  xpEarned        Int      @default(0)
+
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
